@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Transfer — Chronic Health</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: #1d1d1f;
+            background: #fff;
+            padding: 2rem 1.5rem;
+            max-width: 680px;
+            margin: 0 auto;
+        }
+        h1 { font-size: 1.75rem; margin-bottom: 0.25rem; }
+        h2 { font-size: 1.15rem; margin-top: 2rem; margin-bottom: 0.5rem; }
+        h3 { font-size: 1rem; margin-top: 1.5rem; margin-bottom: 0.4rem; }
+        p, ul, ol { margin-bottom: 1rem; }
+        ul, ol { padding-left: 1.25rem; }
+        a { color: #0066cc; }
+        .subtitle { color: #6e6e73; margin-bottom: 2rem; }
+        .callout {
+            background: #f5f5f7;
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            margin: 1.5rem 0;
+        }
+        .callout p:last-child { margin-bottom: 0; }
+        .warning {
+            background: #fff3cd;
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            margin: 1.5rem 0;
+        }
+        .warning p:last-child { margin-bottom: 0; }
+        .back { margin-top: 2.5rem; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+    <h1>Import &amp; Export Data</h1>
+    <p class="subtitle">Transfer your health data between devices or keep a backup</p>
+
+    <p>Chronic Health stores all data locally on your device — there's no cloud sync or account system. The import/export feature lets you move your data manually using a standard JSON file.</p>
+
+    <h2>What's included in the export?</h2>
+    <p>An export captures <strong>everything</strong> in the app:</p>
+    <ul>
+        <li><strong>Configurations</strong> — all your symptoms, treatments (with side effects), and illnesses (with symptom associations)</li>
+        <li><strong>Survey history</strong> — every daily survey you've completed, with all recorded values</li>
+        <li><strong>Settings</strong> — your daily reminder time and whether reminders are enabled</li>
+    </ul>
+
+    <h2>How to export</h2>
+    <ol>
+        <li>Go to the <strong>Settings</strong> tab</li>
+        <li>Tap <strong>Export Data</strong></li>
+        <li>Choose where to save the file (iCloud Drive, Files, AirDrop, etc.)</li>
+    </ol>
+    <p>The file is saved as a <code>.json</code> file that you can store, share, or transfer however you like.</p>
+
+    <h2>How to import</h2>
+    <ol>
+        <li>Go to the <strong>Settings</strong> tab</li>
+        <li>Tap <strong>Import Data</strong></li>
+        <li>Select a previously exported file</li>
+        <li>Confirm when prompted</li>
+    </ol>
+
+    <div class="warning">
+        <p><strong>Important:</strong> Importing replaces all existing data in the app. Any data currently in the app will be overwritten. Export your current data first if you want to keep it.</p>
+    </div>
+
+    <h2>Common use cases</h2>
+
+    <h3>Switching to a new phone</h3>
+    <p>If you're moving to a new iPhone and don't use iCloud Backup (or want to be safe), export your data on the old device, transfer the file (via AirDrop, iCloud Drive, email, etc.), and import it on the new device.</p>
+
+    <h3>Keeping a manual backup</h3>
+    <p>Periodically export your data and save the file to iCloud Drive or another location. If anything happens to your device, you can restore your full health history.</p>
+
+    <h3>Sharing with a healthcare provider</h3>
+    <p>The exported file is standard JSON — a widely used, human-readable data format. If a provider or researcher asks for your raw data, you can share the export file directly.</p>
+
+    <div class="callout">
+        <p><strong>Privacy note:</strong> The export file contains your health data in plain text. Treat it like any other sensitive personal information. Chronic Health never transmits this file — you control where it goes.</p>
+    </div>
+
+    <h2>Troubleshooting</h2>
+
+    <h3>Import doesn't seem to work</h3>
+    <p>Make sure you're selecting a file that was exported from Chronic Health. The file should be in JSON format. If the file is corrupted or from a different app, the import will show an error.</p>
+
+    <h3>I accidentally imported and lost my data</h3>
+    <p>If you had previously exported your data, you can re-import that earlier export file. If not, the overwritten data cannot be recovered — this is why we recommend keeping periodic backups.</p>
+
+    <p class="back"><a href="index.html">&larr; Back to Chronic Health</a></p>
+</body>
+</html>
