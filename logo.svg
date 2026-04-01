@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1a3a2a"/>
+      <stop offset="100%" stop-color="#0f2419"/>
+    </linearGradient>
+    <linearGradient id="tree" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#5ed4a5"/>
+      <stop offset="100%" stop-color="#2ea872"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="112" ry="112" fill="url(#bg)"/>
+
+  <!-- Evergreen tree - 3 tiers, large and centered -->
+  <!-- Top tier -->
+  <polygon points="256,68 196,180 316,180" fill="url(#tree)" opacity="0.95"/>
+  <!-- Middle tier -->
+  <polygon points="256,128 172,272 340,272" fill="url(#tree)" opacity="0.88"/>
+  <!-- Bottom tier -->
+  <polygon points="256,196 148,376 364,376" fill="url(#tree)" opacity="0.80"/>
+
+  <!-- Trunk -->
+  <rect x="240" y="376" width="32" height="52" rx="5" fill="#3d7a5a"/>
+
+  <!-- Ground line -->
+  <line x1="182" y1="428" x2="330" y2="428" stroke="#5ed4a5" stroke-width="2.5" stroke-linecap="round" opacity="0.3"/>
+</svg>
