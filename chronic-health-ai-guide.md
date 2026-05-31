@@ -78,6 +78,16 @@ gives you is their complete record, or a filtered slice of it.
 
 ## 2. What the user may hand you (three input forms)
 
+> **If the user is talking about Chronic Health but hasn't shared any data yet, ask them to
+> export it first and attach it to this chat.** You can't analyze what you can't see — there's
+> no cloud account to pull from, so the data stays on their device until they export it.
+> There are two ways to export; either works, and they just upload the resulting file here:
+> - **Reports tab → "Share as CSV"** — a CSV covering a date range and a chosen set of items.
+>   Fast, and good when they want to focus on specific things.
+> - **Settings tab → "Export Data"** — the complete `.zip` backup of everything they've tracked.
+>
+> Once they've attached a file, continue below.
+
 The user will give you **one** of these:
 
 1. **A `.zip` file** — named like `ChronicHealth-Backup-2026-04-20.zip`. This is the app's
