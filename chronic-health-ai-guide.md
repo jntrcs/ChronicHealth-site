@@ -1,6 +1,6 @@
 ---
 name: chronic-health-data-guide
-description: Use when someone shares data exported from the Chronic Health app — a .zip backup, the data.json inside it, or a CSV from the Reports tab — and wants help reading, summarizing, charting, or discussing it. Explains what the app is, how to convert a .zip/.json export to CSV, and how to interpret every column and value — while making clear these are user-defined categories, NOT medical diagnoses.
+description: Use when someone shares data exported from the Chronic Health app — a .zip backup, the data.json inside it, or a CSV from the Reports tab — and wants help reading, summarizing, charting, or discussing it. Explains what the app is, how to convert a .zip/.json export to CSV, how to interpret every column and value (including the 0–10 pain scale), and how to read the doctor-appointment records — while making clear these are user-defined categories, NOT medical diagnoses.
 ---
 
 # Chronic Health — A Guide for AI Assistants
@@ -24,8 +24,8 @@ diagnosis, lab result, or clinician assessment.**
   "Migraine," "Lupus flare," "Long COVID," or "Flu" means *they chose to track something
   under that name* — not that a doctor diagnosed it. Treat every name as a personal label,
   not a clinical fact.
-- They also chose **how** to measure each thing (yes/no, a 0–3 severity scale, or a count)
-  and what counts as "severe." These scales are subjective and personal. One person's
+- They also chose **how** to measure each thing (yes/no, a 0–3 severity scale, a count, or a
+  0–10 pain scale) and what counts as "severe." These scales are subjective and personal. One person's
   "Severe" headache is not comparable to another's.
 - The data reflects **what they remembered to log**, on the days they opened the app. Gaps
   are extremely common and do **not** mean "nothing happened."
@@ -53,11 +53,13 @@ There are four kinds of trackable things ("health events"):
 | **Side Effect** | An unwanted symptom caused by a specific treatment (always attached to its treatment, never standalone) | Drowsiness from an antihistamine |
 | **Illness** | A simple present/not-present condition that may span multiple days and loosely groups related symptoms | Flu, migraine episode |
 
-Each Symptom and Side Effect is measured on one of three **scales**:
+Each Symptom and Side Effect is measured on one of four **scales**:
 
 - **Boolean** — present / not present (yes/no)
 - **Severity** — None / Mild / Moderate / Severe
 - **Count** — a whole number (e.g. "how many times did you vomit today?")
+- **Pain (0–10)** — an integer from `0` (no pain) to `10` (worst pain), a standard 0–10 pain
+  rating. `0` is the "none/absent" value, exactly like count `0`.
 
 **Treatments use only Boolean or Count — never Severity.** A severity scale doesn't make sense
 for an action the user took (boolean = taken / not taken; count = e.g. number of doses). So a
@@ -114,9 +116,11 @@ The user will give you **one** of these:
   in time and a subset of their items. More may have been recorded and deliberately not shared.
   If completeness matters for their question, say so and ask whether they can share the full
   `.zip`/`.json`.
-- **Got a `.zip`?** Unzip it and find `data.json` at the top level. Then convert it to CSV
-  (next step). Ignore the `photos/` folder unless they specifically ask about photos.
-- **Got a `.json`?** Convert it to CSV (next step).
+- **Got a `.zip`?** Unzip it and find `data.json` at the top level. You can work with that JSON
+  directly, or convert it to a CSV table first if that's easier to analyze (see §3). Ignore the
+  `photos/` folder unless they specifically ask about photos.
+- **Got a `.json`?** You can analyze it as-is, or convert it to a CSV table first if that's
+  easier (see §3).
 
 > **⚠️ Assume you are seeing only part of the picture.** Whatever form you receive, the user
 > may have tracked far more than they chose to share — this is especially true for a CSV,
@@ -128,15 +132,20 @@ The user will give you **one** of these:
 > mistakes), don't try to infer values for the un-shared items, and when scope matters, ask
 > the user what was and wasn't included.
 
-> **Always convert `.zip`/`.json` to CSV first.** The CSV is the clean, day-by-day table
-> that's easy to reason about and chart. Do all your analysis on the CSV. Only go back to the
-> raw JSON for the few extra details the CSV intentionally drops (see §5).
+> **Tip: a CSV is often the easiest way to work with this data.** The JSON holds everything,
+> but its day-by-day records are nested and awkward to scan. Flattening it to a CSV — a clean
+> table with one row per day (see §3) — usually makes trends, counts, and charts much easier.
+> This is a recommendation, not a requirement: if you're comfortable reasoning over the JSON
+> directly, or only need a quick lookup, that's perfectly fine. The interpretation rules in §4
+> (blanks vs. zeros, scales, null positions) apply either way, and remember the JSON carries a
+> few details the CSV drops (see §5).
 
 ---
 
-## 3. Converting a `.zip` / `.json` export to CSV
+## 3. Converting a `.zip` / `.json` export to CSV (optional)
 
-Save the script below as `json_to_csv.py`, then run it on the export's `data.json`:
+If you'd like the CSV table (see the tip above for why it's often easier), save the script below
+as `json_to_csv.py`, then run it on the export's `data.json`:
 
 ```bash
 python3 json_to_csv.py data.json            # prints CSV to the screen
@@ -202,12 +211,14 @@ def format_measured_value(value_obj):
     """
     Convert a Swift auto-synthesized MeasuredValue JSON to CSV string.
 
-    Encoding format: {"boolean": {"_0": true}} or {"severity": {"_0": "Moderate"}} etc.
+    Encoding format: {"boolean": {"_0": true}}, {"severity": {"_0": "Moderate"}},
+    {"count": {"_0": 3}}, or {"painScale": {"_0": 7}}.
     CSV output:
       - boolean true  -> "yes"
       - boolean false -> "no"
       - severity      -> numeric 0/1/2/3
       - count         -> integer string
+      - pain scale    -> integer string 0-10
     """
     severity_map = {"None": "0", "Mild": "1", "Moderate": "2", "Severe": "3"}
 
@@ -219,6 +230,8 @@ def format_measured_value(value_obj):
         return severity_map.get(level, "0")
     elif "count" in value_obj:
         return str(value_obj["count"]["_0"])
+    elif "painScale" in value_obj:
+        return str(value_obj["painScale"]["_0"])
     else:
         return ""
 
@@ -490,6 +503,7 @@ Day notes are escaped the same way.
 | Boolean — not present | `no` |
 | Severity — None / Mild / Moderate / Severe | `0` / `1` / `2` / `3` |
 | Count | the integer (e.g. `0`, `1`, `4`) |
+| Pain scale (0–10) | the integer `0`–`10` (e.g. `0`, `4`, `9`) |
 | Illness — present that day | `yes` |
 | Illness — not present that day | `no` |
 | **No record for that item on that day** | **blank** (empty cell) |
@@ -498,9 +512,12 @@ Notes:
 
 - **Severity is numbers, not words.** `0`=None, `1`=Mild, `2`=Moderate, `3`=Severe. When you
   summarize for the user, translate back to the words — don't show them raw `2`s.
-- A `0` (severity None or count 0) and `no` (boolean/illness) are **real recorded values**
-  meaning "asked about, and it was at zero/absent that day." A **blank** means something
-  different (next section).
+- **Pain scale is the raw integer `0`–`10`** (`0` = no pain). In the CSV it's written exactly
+  like a count, so a pain column and a count column can look identical — see §5 to tell them
+  apart.
+- A `0` (severity None, count 0, or pain scale 0) and `no` (boolean/illness) are **real
+  recorded values** meaning "asked about, and it was at zero/absent that day." A **blank**
+  means something different (next section).
 
 ### 4.4 The two things that look like "nothing" — don't confuse them
 
@@ -562,13 +579,14 @@ contains more. If the user asks about any of the following, go back to the `data
 
 | Only in the JSON (dropped from CSV) | What it is |
 |---|---|
-| **Measurement scale of each item** | The CSV omits whether a column is boolean/severity/count; you can only *infer* it from the values. The JSON states it explicitly (`measurementScale`). |
+| **Measurement scale of each item** | The CSV omits whether a column is boolean/severity/count/pain-scale; you can only *infer* it from the values. The JSON states it explicitly (`measurementScale`). |
 | **Per-record notes** | Each individual symptom/treatment/side-effect record can carry its own note. The CSV keeps **only the day-level `notes`**, not these per-item notes. |
 | **Tags** | User-defined tags grouping items (with colors). |
 | **Photos** | Day photos attached to surveys (the `photos/` folder + filenames). |
 | **`createdAt` / `completedAt`** | When an item was first set up, and the timestamp a survey was actually completed (vs. the day it's *for*). |
 | **`includeInDailySurvey`** | Whether an item is part of the everyday list. |
 | **Reminder settings, custom item ordering** | App preferences. |
+| **Appointments & doctors** | The user's doctor directory and their log of appointments — visit dates, the doctor seen, pre-visit discussion topics, and post-visit summaries. Never in the CSV (which is only the daily survey grid). See §5.1. |
 
 ### Inferring an item's scale from CSV values
 
@@ -578,13 +596,19 @@ When you only have the CSV, infer the scale from a column's values:
 - Only `0`/`1`/`2`/`3` → most likely **severity** (`0`=None … `3`=Severe) — **but only for a
   symptom or side-effect column.** Treatments are never severity (see §1), so `0`–`3` in a
   treatment column is a **count**, not a severity level.
-- Any integer, especially values above `3` → **count**.
+- Integers staying within `0`–`10` on a symptom or side-effect column (especially reaching
+  `4`–`10`) → could be a **pain scale** (0–10 rating) *or* a **count** — the two are encoded
+  identically in the CSV. Treatments never use pain scale (see §1), so on a treatment column
+  it's a **count**.
+- Any integer **above `10`** → **count** (rules out both severity and pain scale).
 
 ⚠️ Ambiguity: a severity column where the user only ever logged None/Mild looks identical to a
-count column that only hit `0`/`1`. And `yes`/`no` is the same for boolean symptoms and
-illnesses. Use **column position** to disambiguate where possible (illnesses come *after* all
-treatments and side effects; treatment columns are boolean or count only), and when it matters,
-check the JSON's `measurementScale`. When unsure, tell the user you're inferring.
+count column that only hit `0`/`1`. A **pain-scale** column and a **count** column are
+indistinguishable by value alone unless the count exceeds `10`. And `yes`/`no` is the same for
+boolean symptoms and illnesses. Use **column position** to disambiguate where possible
+(illnesses come *after* all treatments and side effects; treatment columns are boolean or count
+only), and when it matters, check the JSON's `measurementScale`. When unsure, tell the user
+you're inferring.
 
 ### JSON structure (brief reference)
 
@@ -605,17 +629,59 @@ check the JSON's `measurementScale`. When unsure, tell the user you're inferring
     "illnessRecords":    [ { "illnessName", "date", "isPresent": true } ],
     "photoFilenames": ["<uuid>.jpg"]
   } ],
-  "settings": { "reminderEnabled", "reminderHour", "reminderMinute" },
+  "settings": { "reminderEnabled", "reminderHour", "reminderMinute",
+                "appointmentRemindersEnabled", "appointmentReminderLeads" },  // last two optional
   "surveyItemOrder": [ ... ],
   "tags": [ { "name", "colorIndex", "createdAt",
-              "taggedSymptomNames", "taggedTreatmentNames", "taggedIllnessNames" } ]
+              "taggedSymptomNames", "taggedTreatmentNames", "taggedIllnessNames" } ],
+  "doctors": [ { "name", "phone", "address", "clinic", "createdAt",
+                 "reportTagNames": ["..."] } ],                  // a doctor directory
+  "appointments": [ {
+    "date", "postVisitSummary", "createdAt", "addedToSystemCalendar",
+    "doctorName",                                                // links a doctor by name; may be null
+    "preVisitNotes": [ { "text", "detail", "isAddressed", "createdAt" } ],
+    "aiSummary"                                                  // optional (iOS 26+)
+  } ]
 }
 ```
 
 Everything links **by name**, not by ID. A measured value is encoded as one of:
-`{"boolean": {"_0": true}}`, `{"severity": {"_0": "Moderate"}}`, or `{"count": {"_0": 3}}`.
-Fields added in later app versions (`settings`, `surveyItemOrder`, `tags`, `photoFilenames`)
-may be absent in older exports — treat them as optional.
+`{"boolean": {"_0": true}}`, `{"severity": {"_0": "Moderate"}}`, `{"count": {"_0": 3}}`, or
+`{"painScale": {"_0": 7}}`. The item's `measurementScale` is one of `"boolean"`, `"severity"`,
+`"count"`, or `"painScale"`.
+Fields added in later app versions (`settings`, `surveyItemOrder`, `tags`, `photoFilenames`,
+`doctors`, `appointments`) may be absent in older exports — treat them as optional.
+
+### 5.1 Appointments & doctors (JSON only)
+
+Newer versions of the app let the user keep a **doctor directory** and a **log of
+appointments**. This data lives **only in the JSON** (`doctors` and `appointments`) — it is
+never part of the CSV, which is purely the daily survey grid. If the user wants help with
+visits and the appointment data is present, read it from the JSON.
+
+- **Doctors** — a contact directory: `name`, `phone`, `address`, `clinic`, and `reportTagNames`
+  (the set of tags the user wants emphasized in reports for that doctor). Purely user-entered.
+- **Appointments** — one entry per visit:
+  - `date` — when the visit is/was (future dates are possible; an appointment can be upcoming).
+  - `doctorName` — which doctor, matched **by name** to the directory; may be `null` (no doctor
+    attached).
+  - `preVisitNotes` — the user's agenda for the visit: a list of discussion topics, each with a
+    `text` (the topic/question), optional `detail` (notes under it), an `isAddressed` flag
+    (whether they marked it covered), and `createdAt`.
+  - `postVisitSummary` — free text the user wrote about what happened at the visit.
+  - `aiSummary` — an optional on-device summary (iOS 26+); may be absent or empty.
+  - `addedToSystemCalendar` — whether they also put it on their phone calendar (housekeeping;
+    rarely relevant to analysis).
+
+**How to use it.** Build a timeline of visits; cross-reference symptom/treatment trends around
+appointment dates; help the user prep for an **upcoming** appointment by surfacing pre-visit
+topics that aren't yet `isAddressed`; or summarize what was discussed across past visits.
+
+**Same caveats as everything else.** These are self-entered notes, not a clinical record or a
+transcript — `postVisitSummary` and `aiSummary` are the *user's* recollection. Doctor names and
+visit notes may reference symptoms, medications, or conditions that don't appear as survey
+columns; treat those as real context, don't fabricate values for them, and keep deferring
+medical questions to their actual providers.
 
 ---
 
@@ -632,7 +698,9 @@ when combined with other health data sources like fitness trackers, lab results,
 - **Possible associations** — e.g. whether a symptom tends to follow a treatment or cluster
   with an illness — framed as observations to explore, *with* caveats about causation and
   sample size.
-- **Doctor-visit prep** — a concise, organized summary the user can bring to a clinician.
+- **Doctor-visit prep** — a concise, organized summary the user can bring to a clinician. If
+  the export includes **appointments** (§5.1), draw on their pre-visit topics (especially any
+  not yet `isAddressed`) and past post-visit summaries to focus the prep.
 - **Charts/tables** — timelines of severity, illness spans, treatment frequency.
 
 Always:
