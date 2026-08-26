@@ -1,6 +1,6 @@
 ---
 name: chronic-health-data-guide
-description: Use when someone shares data exported from the Chronic Health app — a .zip backup, the data.json inside it, or a CSV from the Reports tab — and wants help reading, summarizing, charting, or discussing it. Explains what the app is, how to convert a .zip/.json export to CSV, how to interpret every column and value (including the 0–10 pain scale), and how to read the doctor-appointment records — while making clear these are user-defined categories, NOT medical diagnoses.
+description: Use when someone shares data exported from the Chronic Health app — a .zip backup, the data.json inside it, or a CSV from the Reports tab — and wants help reading, summarizing, charting, or discussing it. Explains what the app is, how to convert a .zip/.json export to CSV, how to interpret every column and value (including the 0–10 pain scale, the 1–5 treatment-effectiveness rating, and the multi-note day column), and how to read the doctor-appointment records — while making clear these are user-defined categories, NOT medical diagnoses.
 ---
 
 # Chronic Health — A Guide for AI Assistants
@@ -30,7 +30,7 @@ diagnosis, lab result, or clinician assessment.**
 - The data reflects **what they remembered to log**, on the days they opened the app. Gaps
   are extremely common and do **not** mean "nothing happened."
 
-Remeber this when suggesting diagnoses, evaluating treatments, and prepping information form their doctor.
+Remember this when suggesting diagnoses, evaluating treatments, and prepping information for their doctor.
 Their healthcare providers may have more accurate info and more correct terminology. Defer to them.
 When in doubt, encourage the user to seek proper medical expertise.
 
@@ -65,6 +65,13 @@ Each Symptom and Side Effect is measured on one of four **scales**:
 for an action the user took (boolean = taken / not taken; count = e.g. number of doses). So a
 treatment column will only ever contain `yes`/`no` or whole-number counts.
 
+**A treatment may also carry a 1–5 effectiveness rating.** The user can switch on "Track
+effectiveness" for a treatment; the app then asks "how well did it work?" on the days that
+treatment was actually taken. The scale is **`1` = least effective … `5` = most effective** —
+note this runs **opposite** to severity and pain, where higher means worse. The rating is
+recorded separately from the treatment's own value and gets **its own column** in the CSV
+(§4.2). A blank rating means **unrated**, not "it didn't work."
+
 **Illnesses** are always a simple **present / not present** toggle for the day.
 
 **How the daily survey works (context for interpreting gaps):** the survey adapts each day.
@@ -72,6 +79,11 @@ It always shows the user's chosen everyday items, plus anything that was still "
 previous day (so an ongoing issue keeps appearing until it resolves and then drops off), plus
 an option to add brand-new things. This is why an item can appear on some days and be
 completely absent on others — which directly affects how to read blank cells (see §4).
+
+**Day notes.** The user can also write free-text notes on any day — as many as they like.
+A note can stand on its own or be **attached to one specific symptom, treatment, or illness**
+("[Advil] two tablets, helped within the hour"). Notes are day-level, not per-record, and they
+save independently of the survey itself — so a day can hold notes with no survey answers at all.
 
 The app stores data **locally on the device only** (no cloud account). The export the user
 gives you is their complete record, or a filtered slice of it.
@@ -169,6 +181,10 @@ Replicates the column ordering and value formatting from the app's CSV export,
 discarding configuration metadata, settings, and record-level notes that
 the CSV format does not include.
 
+Reads every payload version (1-4): it prefers `dayKey` over `date` for the
+calendar day, emits a `<Treatment> - Effectiveness` column where ratings exist,
+and flattens `dayNotes` into the notes cell, falling back to older shapes.
+
 Usage:
     python3 json_to_csv.py export.json              # writes to stdout
     python3 json_to_csv.py export.json -o output.csv # writes to file
@@ -236,12 +252,71 @@ def format_measured_value(value_obj):
         return ""
 
 
-def escape_csv_value(value):
-    """Escape a value for CSV."""
-    if "," in value or '"' in value or "\n" in value:
-        escaped = value.replace('"', '""')
-        return f'"{escaped}"'
-    return value
+def survey_day(survey):
+    """The calendar day a survey is for.
+
+    Prefer `dayKey` (integer yyyymmdd, added in payload version 2): it means the
+    same day regardless of what timezone the phone was in. `date` is an absolute
+    instant and can land on the neighbouring day, so it is only a version 1
+    fallback.
+    """
+    key = survey.get("dayKey")
+    if key:
+        return datetime(key // 10000, (key // 100) % 100, key % 100).date()
+    return parse_iso8601(survey["date"])
+
+
+def counts_as_completed_survey(survey):
+    """Whether a survey row represents an *answered* survey.
+
+    Mirrors the app's own gate. Notes and photos save independently of the
+    survey, so a row existing is not proof the user answered anything. A row
+    with no records and no notes/photos is the deliberate "record no issues
+    today" save, which does count.
+    """
+    if any(
+        survey.get(key)
+        for key in (
+            "symptomRecords",
+            "treatmentRecords",
+            "sideEffectRecords",
+            "illnessRecords",
+        )
+    ):
+        return True
+    # `notes` covers version 1 and 2 files, where the day's single note lived there.
+    has_notes = bool(survey.get("dayNotes")) or bool(survey.get("notes"))
+    return not has_notes and not survey.get("photoFilenames")
+
+
+def note_item_name(note):
+    """The symptom/treatment/illness a day note is attached to, or None."""
+    return (
+        note.get("symptomName")
+        or note.get("treatmentName")
+        or note.get("illnessName")
+    )
+
+
+def flatten_day_notes(survey):
+    """Render a day's notes into one cell, matching the app's CSV.
+
+    Unattached notes first in createdAt order, then attached notes sorted by
+    item name and prefixed `[Item] `, joined by a blank line. Falls back to the
+    legacy single `notes` string for version 1 and 2 files.
+    """
+    notes = survey.get("dayNotes")
+    if not notes:
+        return survey.get("notes") or ""
+    by_date = sorted(notes, key=lambda n: n.get("createdAt", ""))
+    unattached = [n["text"] for n in by_date if not note_item_name(n)]
+    attached = sorted(
+        (n for n in by_date if note_item_name(n)),
+        key=lambda n: (note_item_name(n), n.get("createdAt", "")),
+    )
+    return "\n\n".join(
+        unattached + [f"[{note_item_name(n)}] {n['text']}" for n in attached]
+    )
 
 
 def all_dates_in_range(start, end):
@@ -255,11 +330,10 @@ def all_dates_in_range(start, end):
 
 
 def build_survey_lookup(backup_data):
-    """Map each survey date -> survey object."""
+    """Map each calendar day -> survey object."""
     lookup = {}
     for survey in backup_data.get("surveyEvents", []):
-        date = parse_iso8601(survey["date"])
-        lookup[date] = survey
+        lookup[survey_day(survey)] = survey
     return lookup
 
 
@@ -290,9 +364,19 @@ def convert(backup_data):
         return "date,survey_recorded,notes\n"
 
     # Determine date range from surveys
-    survey_dates = [parse_iso8601(s["date"]) for s in survey_events]
+    survey_dates = [survey_day(s) for s in survey_events]
     start_date = min(survey_dates)
     end_date = max(survey_dates)
+
+    # Treatments that ever carried an effectiveness rating. The app emits the
+    # column when the treatment tracks effectiveness OR any record holds a
+    # rating, so history kept after switching tracking off still exports.
+    rated_treatments = {
+        record["treatmentName"]
+        for survey in survey_events
+        for record in survey.get("treatmentRecords", [])
+        if record.get("effectiveness") is not None
+    }
 
     survey_lookup = build_survey_lookup(backup_data)
     dates = all_dates_in_range(start_date, end_date)
@@ -338,6 +422,28 @@ def convert(backup_data):
             return getter
 
         columns.append((t_name, make_treatment_getter(t_name)))
+
+        # Effectiveness sits between the treatment and its side effects,
+        # matching the order the app writes them in.
+        if treatment.get("tracksEffectiveness") or t_name in rated_treatments:
+
+            def make_effectiveness_getter(tname):
+                def getter(survey):
+                    if survey is None:
+                        return ""
+                    lookup = build_record_lookup(
+                        survey, "treatmentRecords", "treatmentName"
+                    )
+                    record = lookup.get(tname)
+                    if record is None:
+                        return ""
+                    rating = record.get("effectiveness")
+                    return "" if rating is None else str(rating)
+                return getter
+
+            columns.append(
+                (f"{t_name} - Effectiveness", make_effectiveness_getter(t_name))
+            )
 
         # Side effects nested under treatment
         sorted_side_effects = sorted(
@@ -412,17 +518,15 @@ def convert(backup_data):
     writer.writerow(headers)
 
     # Data rows
-    for date in dates:
-        survey = survey_lookup.get(date)
-        row = [date.strftime("%Y-%m-%d")]
-        row.append("true" if survey is not None else "false")
+    for day in dates:
+        survey = survey_lookup.get(day)
+        row = [day.strftime("%Y-%m-%d")]
+        recorded = survey is not None and counts_as_completed_survey(survey)
+        row.append("true" if recorded else "false")
         for _, getter in columns:
             row.append(getter(survey))
-        # Notes
-        if survey is not None and survey.get("notes"):
-            row.append(survey["notes"])
-        else:
-            row.append("")
+        # Notes (always the last column)
+        row.append(flatten_day_notes(survey) if survey is not None else "")
         writer.writerow(row)
 
     return output.getvalue()
@@ -476,24 +580,34 @@ Columns always appear in this exact order:
 1. **`date`** — the day, formatted `YYYY-MM-DD`.
 2. **`survey_recorded`** — `true` or `false`. See §4.4; this is critical.
 3. **Standalone symptoms** — one column per symptom, sorted alphabetically by name.
-4. **Treatments, each followed immediately by its side effects** — sorted alphabetically.
-   A side-effect column is named **`<Treatment> - <Side Effect>`** (e.g.
-   `Zyrtec - Drowsiness`). Side effects never appear on their own; they always sit right
-   after their parent treatment.
+4. **Treatments** — sorted alphabetically. Each treatment contributes, in this order:
+   1. the treatment's own column, headed with its name;
+   2. **`<Treatment> - Effectiveness`** — present *only* for treatments that track
+      effectiveness, or that carry any rating in their history. Many treatments won't have
+      one at all. Values are `1`–`5`; see §4.3.
+   3. one column per side effect, headed **`<Treatment> - <Side Effect>`** (e.g.
+      `Zyrtec - Drowsiness`). Side effects never appear on their own; they always sit right
+      after their parent treatment.
 5. **Illnesses, each followed by its associated symptoms** — sorted alphabetically. (A
    symptom that already appeared as a standalone column, or under an earlier illness, is
    **not** repeated — see §4.5.)
-6. **`notes`** — free-text note the user wrote for that whole day. Always the last column.
+6. **`notes`** — the user's free-text notes for that day. There can be **several notes in
+   one cell**, and some may be tagged to a specific item. Always the last column; see §4.6.
 
 So a header row looks like:
 
 ```
-date,survey_recorded,Brain fog,Fatigue,Headache,Ibuprofen,Zyrtec,Zyrtec - Drowsiness,Flu,Cough,Fever,notes
+date,survey_recorded,Brain fog,Fatigue,Headache,Ibuprofen,Zyrtec,Zyrtec - Effectiveness,Zyrtec - Drowsiness,Flu,Cough,Fever,notes
 ```
 
 Column **headers are the user's own free-typed names.** If a name contains a comma, quote, or
 newline, it's wrapped in double quotes per standard CSV rules (e.g. `"Pain, lower back"`).
 Day notes are escaped the same way.
+
+⚠️ **`<Treatment> - Effectiveness` and `<Treatment> - <Side Effect>` share a naming shape.**
+If a user happened to name a side effect "Effectiveness," the two headers would be identical
+in form. Position settles it: the effectiveness column always comes **immediately after** the
+treatment's own column and **before** any side effects.
 
 ### 4.3 Cell values — how each scale is encoded
 
@@ -504,6 +618,8 @@ Day notes are escaped the same way.
 | Severity — None / Mild / Moderate / Severe | `0` / `1` / `2` / `3` |
 | Count | the integer (e.g. `0`, `1`, `4`) |
 | Pain scale (0–10) | the integer `0`–`10` (e.g. `0`, `4`, `9`) |
+| Treatment effectiveness — rated | the integer `1`–`5` (**`1` = least effective, `5` = most**) |
+| Treatment effectiveness — not rated | **blank** (there is no `0` on this scale) |
 | Illness — present that day | `yes` |
 | Illness — not present that day | `no` |
 | **No record for that item on that day** | **blank** (empty cell) |
@@ -515,6 +631,14 @@ Notes:
 - **Pain scale is the raw integer `0`–`10`** (`0` = no pain). In the CSV it's written exactly
   like a count, so a pain column and a count column can look identical — see §5 to tell them
   apart.
+- **Effectiveness runs the opposite direction from everything else.** In a
+  `- Effectiveness` column, `5` is a *good* day (the treatment worked well) and `1` is a poor
+  one; in every severity and pain column, high is bad. Never plot them on a shared axis or
+  fold them into one "average score" without saying which way each points.
+- **A blank effectiveness cell is not a zero and not a failure.** The scale starts at `1`, so
+  blank simply means unrated — usually because the treatment wasn't taken that day (the app
+  only asks on days it *was*), or because the user skipped the question. Exclude blanks from
+  effectiveness averages; don't count them as poor outcomes.
 - A `0` (severity None, count 0, or pain scale 0) and `no` (boolean/illness) are **real
   recorded values** meaning "asked about, and it was at zero/absent that day." A **blank**
   means something different (next section).
@@ -523,9 +647,14 @@ Notes:
 
 This is the most common misreading. There are **two** distinct "absences":
 
-1. **`survey_recorded = false`** (and the whole row blank): the user **did not fill out the
-   app at all** that day. This is missing data. It does **NOT** mean they were healthy or
+1. **`survey_recorded = false`** (and the value columns blank): the user **did not answer the
+   survey** that day. This is missing data. It does **NOT** mean they were healthy or
    symptom-free — you simply don't know what happened. Never count these days as "good days."
+
+   A `false` row can still carry a **`notes` cell**: notes and photos save on their own,
+   without the survey, so the user can jot something down on a day they answered nothing. Read
+   that as "they wrote something that day but didn't do the survey" — the note is real, the
+   absent values are still unknown.
 
 2. **A blank cell on a `survey_recorded = true` row**: the user *did* do the survey that day,
    but **that particular item wasn't on the survey** that day — so nothing was recorded for
@@ -555,9 +684,48 @@ Matching is case-insensitive. So you will never see the same symptom in two colu
 aware a symptom listed under "Flu" might actually be the user's general standalone "Cough"
 column appearing earlier in the table.
 
-### 4.6 Other gotchas
+### 4.6 The `notes` column holds *several* notes
 
-- **Dates are day-level** in the device's local time zone. There is no time-of-day in the CSV.
+A day can carry any number of notes, and the CSV packs them all into that day's single `notes`
+cell. The assembly is deterministic:
+
+1. **Unattached notes first**, in the order they were written.
+2. **Then notes attached to an item**, sorted alphabetically by item name, each prefixed with
+   the item's name in square brackets: `[Advil] two tablets`.
+3. Entries are separated by a **blank line** (`\n\n`).
+
+Because the cell contains newlines, it is always double-quoted per CSV rules. A single day's
+cell can therefore look like this:
+
+```
+"Rough day
+
+[Advil] two tablets
+
+[Headache] worse after screens"
+```
+
+Reading it:
+
+- **A `[Name]` prefix means the user tied that note to that specific symptom, treatment, or
+  illness** — it is context *about that item on that day*, and worth reading alongside that
+  item's column. Text with no prefix is a general note about the day.
+- **The bracketed name is the item's name, not a value.** `[Advil] two tablets` does not mean
+  the Advil column reads `2`; the column holds whatever was actually recorded.
+- **Don't parse the prefix too literally.** A user can write square brackets in their own note
+  text, and an item name can contain almost anything. Treat the structure as a strong hint,
+  not a guaranteed grammar.
+- **Notes attached to an item that isn't in the report are dropped** from a Reports-tab CSV,
+  the same way that item's column is. Unattached notes are always kept. So a filtered CSV can
+  be missing notes the user did write — one more reason the full `.zip` is more complete.
+- **Older exports had at most one note per day** and no attachments, so a single unprefixed
+  block is perfectly normal.
+
+### 4.7 Other gotchas
+
+- **Dates are day-level.** There is no time-of-day in the CSV. Each row is the calendar day
+  the user was answering *for* — which the app records independently of time zone, so a day
+  doesn't shift if they travel. (In the JSON this is the `dayKey` field; see §5.)
 - **Don't assume regular spacing of real entries.** Rows are daily, but actual responses can
   be sparse and clustered (e.g. lots of entries during a flare, then weeks of `false`).
 - **The data is only what the user chose to track.** Absence of a symptom column doesn't mean
@@ -581,6 +749,8 @@ contains more. If the user asks about any of the following, go back to the `data
 |---|---|
 | **Measurement scale of each item** | The CSV omits whether a column is boolean/severity/count/pain-scale; you can only *infer* it from the values. The JSON states it explicitly (`measurementScale`). |
 | **Per-record notes** | Each individual symptom/treatment/side-effect record can carry its own note. The CSV keeps **only the day-level `notes`**, not these per-item notes. |
+| **Which item each day note is attached to** | The CSV flattens day notes into one cell with a `[Name]` prefix (§4.6); the JSON keeps each note as its own object with an explicit `symptomName` / `treatmentName` / `illnessName` and a `createdAt`. Notes attached to an item outside a filtered CSV are dropped entirely — the JSON has them all. |
+| **Whether a treatment is *currently* tracking effectiveness** | The CSV shows the ratings, but not the `tracksEffectiveness` flag. A treatment can have historical ratings with tracking now switched off — the column still appears, it just stops gaining new values. |
 | **Tags** | User-defined tags grouping items (with colors). |
 | **Photos** | Day photos attached to surveys (the `photos/` folder + filenames). |
 | **`createdAt` / `completedAt`** | When an item was first set up, and the timestamp a survey was actually completed (vs. the day it's *for*). |
@@ -601,6 +771,9 @@ When you only have the CSV, infer the scale from a column's values:
   identically in the CSV. Treatments never use pain scale (see §1), so on a treatment column
   it's a **count**.
 - Any integer **above `10`** → **count** (rules out both severity and pain scale).
+- A column whose header ends in **` - Effectiveness`** is a treatment-effectiveness rating,
+  not a scale at all: `1`–`5`, higher is better, never `0`. Identify it by the header, not by
+  the values — `1`–`5` alone would otherwise look like a count.
 
 ⚠️ Ambiguity: a severity column where the user only ever logged None/Mild looks identical to a
 count column that only hit `0`/`1`. A **pain-scale** column and a **count** column are
@@ -614,17 +787,24 @@ you're inferring.
 
 ```jsonc
 {
-  "version": 1,
+  "version": 4,                            // payload version — see the table below
   "exportDate": "2026-04-20T...",          // ISO 8601 timestamps throughout
   "symptoms":   [ { "name", "measurementScale", "includeInDailySurvey", "createdAt" } ],
   "treatments": [ { "name", "measurementScale", "includeInDailySurvey", "createdAt",
+                    "tracksEffectiveness": true,              // v4+; asks for a 1-5 rating
                     "sideEffects": [ { "name", "measurementScale", "createdAt" } ] } ],
   "illnesses":  [ { "name", "includeInDailySurvey", "createdAt",
                     "symptomNames": ["Cough", "Fever"] } ],   // associations by name
   "surveyEvents": [ {
-    "date", "completedAt", "notes",
+    "date",                                // an absolute instant — do NOT group days by this
+    "dayKey": 20260420,                    // v2+; the real calendar day, as yyyymmdd
+    "completedAt",
+    "notes",                               // flattened copy of dayNotes, for old app versions
+    "dayNotes": [ { "text", "createdAt",   // v3+; the real notes list
+                    "symptomName", "treatmentName", "illnessName" } ],  // at most one, else null
     "symptomRecords":    [ { "symptomName", "date", "value", "notes" } ],
-    "treatmentRecords":  [ { "treatmentName", "date", "value", "notes" } ],
+    "treatmentRecords":  [ { "treatmentName", "date", "value", "notes",
+                             "effectiveness": 4 } ],          // v4+; 1-5, or null/absent
     "sideEffectRecords": [ { "treatmentName", "sideEffectName", "date", "value", "notes" } ],
     "illnessRecords":    [ { "illnessName", "date", "isPresent": true } ],
     "photoFilenames": ["<uuid>.jpg"]
@@ -650,7 +830,34 @@ Everything links **by name**, not by ID. A measured value is encoded as one of:
 `{"painScale": {"_0": 7}}`. The item's `measurementScale` is one of `"boolean"`, `"severity"`,
 `"count"`, or `"painScale"`.
 Fields added in later app versions (`settings`, `surveyItemOrder`, `tags`, `photoFilenames`,
-`doctors`, `appointments`) may be absent in older exports — treat them as optional.
+`doctors`, `appointments`, `dayKey`, `dayNotes`, `tracksEffectiveness`, `effectiveness`) may be
+absent in older exports — treat every one of them as optional.
+
+**Two fields need care:**
+
+- **Use `dayKey`, not `date`, to decide which calendar day a survey belongs to.** `dayKey` is
+  the integer `yyyymmdd` of the day the survey is *for*, and it means the same thing no matter
+  where the phone was. `date` is an absolute instant — midnight in whatever time zone the
+  device held when the row was written — so it drifts if the user travels, and can land on the
+  neighbouring day once converted. Fall back to `date` only for version 1 files, which predate
+  `dayKey`.
+- **`notes` and `dayNotes` are the same content twice.** From version 3 on, `dayNotes` is the
+  real list and `notes` is a flattened string kept only so older versions of the app can still
+  read the file. **Read `dayNotes` when it's present** and ignore `notes`; falling back to
+  `notes` for version 1 and 2 files, where it holds the day's single note.
+
+### Payload versions
+
+| `version` | What it added |
+|---|---|
+| `1` | The original format: configs, survey events, records, settings, ordering, tags, photos, doctors, appointments. Days must be derived from `date`. |
+| `2` | `surveyEvents[].dayKey` — a timezone-independent `yyyymmdd` calendar day. |
+| `3` | `surveyEvents[].dayNotes` — multiple notes per day, each optionally attached to one symptom, treatment, or illness. `notes` becomes a compatibility copy. |
+| `4` | `treatments[].tracksEffectiveness` and `treatmentRecords[].effectiveness` — the 1–5 treatment-effectiveness rating. |
+
+A file only ever states the version it was written at, and newer readers handle older files —
+so if you're handed a `"version": 1` export, everything above version 1 is simply absent, not
+missing or corrupt. Don't infer that the user "turned a feature off."
 
 ### 5.1 Appointments & doctors (JSON only)
 
@@ -698,6 +905,13 @@ when combined with other health data sources like fitness trackers, lab results,
 - **Possible associations** — e.g. whether a symptom tends to follow a treatment or cluster
   with an illness — framed as observations to explore, *with* caveats about causation and
   sample size.
+- **How a treatment is landing** — where `- Effectiveness` columns exist, how the user rated a
+  treatment over time, and whether the ratings track their symptoms. Say the denominator out
+  loud ("across the 23 days you rated it"), keep the direction straight (`5` is good), and
+  remember the rating is the user's impression on the day, not a measured outcome.
+- **Reading the day notes** — the `notes` column is often where the real story is, and a
+  `[Name]` prefix ties a note to a specific item (§4.6). Quote the user's own words back when
+  they explain a spike better than the numbers do.
 - **Doctor-visit prep** — a concise, organized summary the user can bring to a clinician. If
   the export includes **appointments** (§5.1), draw on their pre-visit topics (especially any
   not yet `isAddressed`) and past post-visit summaries to focus the prep.
@@ -708,7 +922,7 @@ Always:
 - Restate, when relevant, that these are **self-tracked, self-defined** categories — not
   diagnoses — and that you're not a medical professional.
 - Be explicit about **missing data** and your denominators (recorded days vs. all days;
-  blanks excluded vs. counted).
+  blanks excluded vs. counted; rated days vs. days a treatment was taken).
 - Remember the shared data may be **a subset** — a slice of dates and a filtered set of items,
   not their whole record. Frame conclusions as "based on what you shared," and if a `notes`
   entry references something not in the data, treat it as real and ask rather than guessing.
