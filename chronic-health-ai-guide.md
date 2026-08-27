@@ -267,13 +267,22 @@ def survey_day(survey):
 
 
 def counts_as_completed_survey(survey):
-    """Whether a survey row represents an *answered* survey.
+    """Whether a survey entry represents an *answered* survey.
 
-    Mirrors the app's own gate. Notes and photos save independently of the
-    survey, so a row existing is not proof the user answered anything. A row
-    with no records and no notes/photos is the deliberate "record no issues
-    today" save, which does count.
+    Mirrors the app's own gate, reading the same three signals in order:
+
+      1. `surveyAnswered` — the stored flag (payload version 5+). Authoritative.
+      2. Any records at all.
+      3. Older files only: an entry carrying no notes and no photos either could
+         only have come from a deliberate "record no issues" save, because the
+         note and photo quick-saves delete their entry when the last piece of
+         content goes away.
+
+    Notes and photos save independently of the survey, so an entry existing is
+    not proof the user answered anything.
     """
+    if survey.get("surveyAnswered"):
+        return True
     if any(
         survey.get(key)
         for key in (
@@ -787,7 +796,7 @@ you're inferring.
 
 ```jsonc
 {
-  "version": 4,                            // payload version — see the table below
+  "version": 5,                            // payload version — see the table below
   "exportDate": "2026-04-20T...",          // ISO 8601 timestamps throughout
   "symptoms":   [ { "name", "measurementScale", "includeInDailySurvey", "createdAt" } ],
   "treatments": [ { "name", "measurementScale", "includeInDailySurvey", "createdAt",
@@ -799,6 +808,7 @@ you're inferring.
     "date",                                // an absolute instant — do NOT group days by this
     "dayKey": 20260420,                    // v2+; the real calendar day, as yyyymmdd
     "completedAt",
+    "surveyAnswered": true,                // v5+; did the user actually answer the survey?
     "notes",                               // flattened copy of dayNotes, for old app versions
     "dayNotes": [ { "text", "createdAt",   // v3+; the real notes list
                     "symptomName", "treatmentName", "illnessName" } ],  // at most one, else null
@@ -830,8 +840,8 @@ Everything links **by name**, not by ID. A measured value is encoded as one of:
 `{"painScale": {"_0": 7}}`. The item's `measurementScale` is one of `"boolean"`, `"severity"`,
 `"count"`, or `"painScale"`.
 Fields added in later app versions (`settings`, `surveyItemOrder`, `tags`, `photoFilenames`,
-`doctors`, `appointments`, `dayKey`, `dayNotes`, `tracksEffectiveness`, `effectiveness`) may be
-absent in older exports — treat every one of them as optional.
+`doctors`, `appointments`, `dayKey`, `dayNotes`, `tracksEffectiveness`, `effectiveness`,
+`surveyAnswered`) may be absent in older exports — treat every one of them as optional.
 
 **Two fields need care:**
 
@@ -841,6 +851,13 @@ absent in older exports — treat every one of them as optional.
   device held when the row was written — so it drifts if the user travels, and can land on the
   neighbouring day once converted. Fall back to `date` only for version 1 files, which predate
   `dayKey`.
+- **`surveyAnswered` tells you whether the day was actually logged.** Notes and photos save
+  on their own, without the survey, so an entry in `surveyEvents` is *not* proof the user
+  answered anything — a day can appear there carrying only a note. When the field is `true`
+  the user really did fill in the survey (even if the answer was "nothing to report"). When
+  it is `false`, treat the day as unlogged, exactly like a date with no entry at all. In files
+  older than version 5 the field is absent; there, infer it as "has any records, or has no
+  notes and no photos either."
 - **`notes` and `dayNotes` are the same content twice.** From version 3 on, `dayNotes` is the
   real list and `notes` is a flattened string kept only so older versions of the app can still
   read the file. **Read `dayNotes` when it's present** and ignore `notes`; falling back to
@@ -854,6 +871,7 @@ absent in older exports — treat every one of them as optional.
 | `2` | `surveyEvents[].dayKey` — a timezone-independent `yyyymmdd` calendar day. |
 | `3` | `surveyEvents[].dayNotes` — multiple notes per day, each optionally attached to one symptom, treatment, or illness. `notes` becomes a compatibility copy. |
 | `4` | `treatments[].tracksEffectiveness` and `treatmentRecords[].effectiveness` — the 1–5 treatment-effectiveness rating. |
+| `5` | `surveyEvents[].surveyAnswered` — whether the user actually answered the survey that day, as opposed to the entry existing only because they attached a note or photo. |
 
 A file only ever states the version it was written at, and newer readers handle older files —
 so if you're handed a `"version": 1` export, everything above version 1 is simply absent, not
