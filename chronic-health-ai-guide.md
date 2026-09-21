@@ -13,6 +13,24 @@ Read the whole guide before you start interpreting numbers. The data format has 
 subtleties (especially around blank cells and what the categories actually mean) that are
 easy to get wrong.
 
+**This guide: last updated 2026-09-21, current through export payload version 6.**
+
+> ⚠️ **Check that number before you trust anything below.** A `.zip` or `.json` export states
+> its own format version in the top-level `version` field. **If the export you were given says
+> a version higher than 6**, this copy of the guide predates that format and someone is working
+> from a stale download.
+>
+> When that happens: tell the user plainly that your copy of the guide is out of date, and get
+> the current one from
+> <https://jntrcs.github.io/ChronicHealth-site/chronic-health-ai-guide.md>, which is always the
+> latest. Don't guess at the newer fields, and be especially wary of the converter script in §3
+> — an unfamiliar record shape makes it **silently wrong** rather than making it fail, because
+> it quietly drops or mis-collapses records it wasn't written to expect.
+>
+> A Reports-tab **CSV carries no version field**, so this check can't run on one. If a user
+> hands you a CSV and the numbers don't behave the way §4 describes, ask whether they can share
+> the full `.zip` — and consider that this guide may simply be older than their app.
+
 ---
 
 ## 0. Read this first — the single most important thing
