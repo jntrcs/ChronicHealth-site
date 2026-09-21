@@ -1,6 +1,6 @@
 ---
 name: chronic-health-data-guide
-description: Use when someone shares data exported from the Chronic Health app — a .zip backup, the data.json inside it, or a CSV from the Reports tab — and wants help reading, summarizing, charting, or discussing it. Explains what the app is, how to convert a .zip/.json export to CSV, how to interpret every column and value (including the 0–10 pain scale, the 1–5 treatment-effectiveness rating, and the multi-note day column), and how to read the doctor-appointment records — while making clear these are user-defined categories, NOT medical diagnoses.
+description: Use when someone shares data exported from the Chronic Health app — a .zip backup, the data.json inside it, or a CSV from the Reports tab — and wants help reading, summarizing, charting, or discussing it. Explains what the app is, how to convert a .zip/.json export to CSV, how to interpret every column and value (including the 0–10 pain scale, the 1–5 treatment-effectiveness rating, the morning/afternoon/evening/night symptom columns, and the multi-note day column), and how to read the doctor-appointment records — while making clear these are user-defined categories, NOT medical diagnoses.
 ---
 
 # Chronic Health — A Guide for AI Assistants
@@ -73,6 +73,13 @@ recorded separately from the treatment's own value and gets **its own column** i
 (§4.2). A blank rating means **unrated**, not "it didn't work."
 
 **Illnesses** are always a simple **present / not present** toggle for the day.
+
+**A symptom can be recorded four times a day.** Most symptoms are answered once, for the day
+as a whole. But the user can switch any individual symptom to **time-of-day tracking**, and
+the survey then asks about it separately for **morning, afternoon, evening, and night**, on
+the same scale each time. It is per-symptom and off by default, so a typical export mixes both
+kinds. Only symptoms work this way — treatments, side effects, and illnesses are always once a
+day. This changes the shape of the data noticeably; see §4.5.
 
 **How the daily survey works (context for interpreting gaps):** the survey adapts each day.
 It always shows the user's chosen everyday items, plus anything that was still "active" the
@@ -181,9 +188,11 @@ Replicates the column ordering and value formatting from the app's CSV export,
 discarding configuration metadata, settings, and record-level notes that
 the CSV format does not include.
 
-Reads every payload version (1-4): it prefers `dayKey` over `date` for the
+Reads every payload version (1-6): it prefers `dayKey` over `date` for the
 calendar day, emits a `<Treatment> - Effectiveness` column where ratings exist,
-and flattens `dayNotes` into the notes cell, falling back to older shapes.
+splits a symptom recorded by time of day into its whole-day and per-slot
+columns, and flattens `dayNotes` into the notes cell, falling back to older
+shapes.
 
 Usage:
     python3 json_to_csv.py export.json              # writes to stdout
@@ -250,6 +259,161 @@ def format_measured_value(value_obj):
         return str(value_obj["painScale"]["_0"])
     else:
         return ""
+
+
+# Declaration order is the app's display order everywhere. Never sort these
+# alphabetically.
+TIME_OF_DAY_SLOTS = ["morning", "afternoon", "evening", "night"]
+TIME_OF_DAY_LABELS = {
+    "morning": "Morning",
+    "afternoon": "Afternoon",
+    "evening": "Evening",
+    "night": "Night",
+}
+
+
+def value_scale(value_obj):
+    """Which scale a MeasuredValue was written on."""
+    for scale in ("boolean", "severity", "count", "painScale"):
+        if scale in value_obj:
+            return scale
+    return None
+
+
+def comparable_value(value_obj):
+    """Numeric ordering within one scale, so `max` is well defined."""
+    severity_rank = {"None": 0, "Mild": 1, "Moderate": 2, "Severe": 3}
+    scale = value_scale(value_obj)
+    if scale == "boolean":
+        return 1.0 if value_obj["boolean"]["_0"] else 0.0
+    if scale == "severity":
+        return float(severity_rank.get(value_obj["severity"]["_0"], 0))
+    if scale == "count":
+        return float(value_obj["count"]["_0"])
+    if scale == "painScale":
+        return float(value_obj["painScale"]["_0"])
+    return 0.0
+
+
+def combine_values(values, scale):
+    """Collapse one day's several records into a single whole-day figure.
+
+    Count sums; every other scale takes the day's maximum. Counts are additive
+    in a way the others are not — two episodes in the morning and five at night
+    is a seven-episode day. A severity or pain reading is an intensity, where
+    the day's worst is the figure that means something and a sum would invent a
+    number off the top of the scale; a boolean's maximum is simply "present at
+    some point in the day".
+    """
+    if not values:
+        return None
+    if scale != "count":
+        return max(values, key=comparable_value)
+    return {"count": {"_0": sum(v["count"]["_0"] for v in values if "count" in v)}}
+
+
+def combined_value(records, configured_scale):
+    """The whole-day figure for one symptom on one day.
+
+    Group by the scale each record was written on before combining. A symptom
+    whose measurement scale changed mid-history can leave a day holding records
+    on two scales, and comparing a count against a severity is arithmetic
+    pretending to be meaning. The larger group wins; a tie goes to the symptom's
+    currently configured scale.
+    """
+    groups = {}
+    for record in records:
+        scale = value_scale(record.get("value", {}))
+        if scale:
+            groups.setdefault(scale, []).append(record["value"])
+    if not groups:
+        return None
+    scale = max(groups, key=lambda s: (len(groups[s]), s == configured_scale, s))
+    return combine_values(groups[scale], scale)
+
+
+def symptom_records_for(survey, name):
+    """Every record for one symptom on one day.
+
+    A symptom tracked by time of day writes up to four, so this returns a list.
+    Keying records by symptom name alone would silently keep only one of them.
+    """
+    return [
+        r for r in survey.get("symptomRecords", []) if r.get("symptomName") == name
+    ]
+
+
+def symptom_slice_info(survey_events):
+    """Which symptoms hold time-of-day records, and which hold untimed ones.
+
+    Derived from the records present, not from the `trackByTimeOfDay` flag —
+    the same way the app decides which columns to emit. History recorded before
+    the setting was switched on (or after it was switched back off) still
+    exports, and a symptom configured to split but with nothing recorded yet
+    stays a single plain column.
+    """
+    timed, untimed = set(), set()
+    for survey in survey_events:
+        for record in survey.get("symptomRecords", []):
+            name = record.get("symptomName")
+            if record.get("timeOfDay"):
+                timed.add(name)
+            else:
+                untimed.add(name)
+    return timed, untimed
+
+
+def make_symptom_getter(sname, scale, which):
+    """`which` is None (the symptom's only record that day), "combined" (the
+    whole day collapsed), "allDay" (the untimed record alone), or a slot name."""
+
+    def getter(survey):
+        if survey is None:
+            return ""
+        records = symptom_records_for(survey, sname)
+        if not records:
+            return ""
+        if which is None:
+            return format_measured_value(records[0]["value"])
+        if which == "combined":
+            value = combined_value(records, scale)
+            return "" if value is None else format_measured_value(value)
+        if which == "allDay":
+            match = [r for r in records if not r.get("timeOfDay")]
+        else:
+            match = [r for r in records if r.get("timeOfDay") == which]
+        return format_measured_value(match[0]["value"]) if match else ""
+
+    return getter
+
+
+def make_symptom_columns(symptom, timed_symptoms, untimed_symptoms):
+    """One column for a plain symptom; up to six for one split by time of day.
+
+    Order matches the app: the whole-day figure under the bare name, then
+    `- All day` (only where untimed records exist), then the four slots. All
+    four slots are emitted even if some hold nothing, so the columns line up
+    across symptoms.
+    """
+    name = symptom["name"]
+    scale = symptom.get("measurementScale")
+
+    if name not in timed_symptoms:
+        return [(name, make_symptom_getter(name, scale, None))]
+
+    columns = [(name, make_symptom_getter(name, scale, "combined"))]
+    if name in untimed_symptoms:
+        columns.append(
+            (f"{name} - All day", make_symptom_getter(name, scale, "allDay"))
+        )
+    for slot in TIME_OF_DAY_SLOTS:
+        columns.append(
+            (
+                f"{name} - {TIME_OF_DAY_LABELS[slot]}",
+                make_symptom_getter(name, scale, slot),
+            )
+        )
+    return columns
 
 
 def survey_day(survey):
@@ -350,6 +514,9 @@ def build_record_lookup(survey, record_key, name_field):
     """
     Build a name -> record dict for a given record type in a survey.
     For side effects, use (treatmentName, sideEffectName) tuple as key.
+
+    Not for symptoms: those can hold four records under one name on a single
+    day, which this would collapse to one. Use `symptom_records_for` instead.
     """
     lookup = {}
     for record in survey.get(record_key, []):
@@ -395,24 +562,16 @@ def convert(backup_data):
     columns = []  # list of (header, getter_fn) where getter_fn(survey_dict) -> str
     claimed_symptom_names = set()
 
+    timed_symptoms, untimed_symptoms = symptom_slice_info(survey_events)
+    symptoms_by_name = {s["name"]: s for s in symptoms}
+
     # 1. Standalone symptoms (sorted alphabetically by name)
     sorted_symptoms = sorted(symptoms, key=lambda s: s["name"])
     for symptom in sorted_symptoms:
-        name = symptom["name"]
-        claimed_symptom_names.add(name.lower())
-
-        def make_symptom_getter(sname):
-            def getter(survey):
-                if survey is None:
-                    return ""
-                lookup = build_record_lookup(survey, "symptomRecords", "symptomName")
-                record = lookup.get(sname)
-                if record is None:
-                    return ""
-                return format_measured_value(record["value"])
-            return getter
-
-        columns.append((name, make_symptom_getter(name)))
+        claimed_symptom_names.add(symptom["name"].lower())
+        columns.extend(
+            make_symptom_columns(symptom, timed_symptoms, untimed_symptoms)
+        )
 
     # 2. Treatments with their side effects (sorted alphabetically)
     sorted_treatments = sorted(treatments, key=lambda t: t["name"])
@@ -502,20 +661,13 @@ def convert(backup_data):
                 continue
             claimed_symptom_names.add(symptom_name.lower())
 
-            def make_assoc_symptom_getter(sname):
-                def getter(survey):
-                    if survey is None:
-                        return ""
-                    lookup = build_record_lookup(
-                        survey, "symptomRecords", "symptomName"
-                    )
-                    record = lookup.get(sname)
-                    if record is None:
-                        return ""
-                    return format_measured_value(record["value"])
-                return getter
-
-            columns.append((symptom_name, make_assoc_symptom_getter(symptom_name)))
+            columns.extend(
+                make_symptom_columns(
+                    symptoms_by_name.get(symptom_name, {"name": symptom_name}),
+                    timed_symptoms,
+                    untimed_symptoms,
+                )
+            )
 
     # --- Build CSV ---
 
@@ -588,7 +740,10 @@ Columns always appear in this exact order:
 
 1. **`date`** — the day, formatted `YYYY-MM-DD`.
 2. **`survey_recorded`** — `true` or `false`. See §4.4; this is critical.
-3. **Standalone symptoms** — one column per symptom, sorted alphabetically by name.
+3. **Standalone symptoms** — sorted alphabetically by name. Most contribute a **single**
+   column headed with the symptom's name. A symptom **recorded by time of day** contributes
+   **several** — a whole-day column under the bare name, then one column per part of the day;
+   see §4.5.
 4. **Treatments** — sorted alphabetically. Each treatment contributes, in this order:
    1. the treatment's own column, headed with its name;
    2. **`<Treatment> - Effectiveness`** — present *only* for treatments that track
@@ -599,24 +754,29 @@ Columns always appear in this exact order:
       after their parent treatment.
 5. **Illnesses, each followed by its associated symptoms** — sorted alphabetically. (A
    symptom that already appeared as a standalone column, or under an earlier illness, is
-   **not** repeated — see §4.5.)
+   **not** repeated — see §4.6.)
 6. **`notes`** — the user's free-text notes for that day. There can be **several notes in
-   one cell**, and some may be tagged to a specific item. Always the last column; see §4.6.
+   one cell**, and some may be tagged to a specific item. Always the last column; see §4.7.
 
 So a header row looks like:
 
 ```
-date,survey_recorded,Brain fog,Fatigue,Headache,Ibuprofen,Zyrtec,Zyrtec - Effectiveness,Zyrtec - Drowsiness,Flu,Cough,Fever,notes
+date,survey_recorded,Brain fog,Fatigue,Headache,Headache - Morning,Headache - Afternoon,Headache - Evening,Headache - Night,Ibuprofen,Zyrtec,Zyrtec - Effectiveness,Zyrtec - Drowsiness,Flu,Cough,Fever,notes
 ```
+
+In that example "Headache" is tracked by time of day and the other symptoms aren't — which is
+why it occupies five columns and they take one each.
 
 Column **headers are the user's own free-typed names.** If a name contains a comma, quote, or
 newline, it's wrapped in double quotes per standard CSV rules (e.g. `"Pain, lower back"`).
 Day notes are escaped the same way.
 
-⚠️ **`<Treatment> - Effectiveness` and `<Treatment> - <Side Effect>` share a naming shape.**
-If a user happened to name a side effect "Effectiveness," the two headers would be identical
-in form. Position settles it: the effectiveness column always comes **immediately after** the
-treatment's own column and **before** any side effects.
+⚠️ **Several kinds of column share the `A - B` naming shape** — `<Treatment> - Effectiveness`,
+`<Treatment> - <Side Effect>`, and `<Symptom> - <part of day>`. If a user happened to name a
+side effect "Effectiveness" or "Morning," the headers would be identical in form. Position
+settles it: the effectiveness column always comes **immediately after** the treatment's own
+column and **before** any side effects, and part-of-day columns always follow their own
+symptom's bare-name column, in day order.
 
 ### 4.3 Cell values — how each scale is encoded
 
@@ -631,6 +791,7 @@ treatment's own column and **before** any side effects.
 | Treatment effectiveness — not rated | **blank** (there is no `0` on this scale) |
 | Illness — present that day | `yes` |
 | Illness — not present that day | `no` |
+| Whole-day column of a time-of-day symptom | the day's **total** (count) or **worst** (severity/pain/boolean) — see §4.5 |
 | **No record for that item on that day** | **blank** (empty cell) |
 
 Notes:
@@ -648,6 +809,10 @@ Notes:
   blank simply means unrated — usually because the treatment wasn't taken that day (the app
   only asks on days it *was*), or because the user skipped the question. Exclude blanks from
   effectiveness averages; don't count them as poor outcomes.
+- **A split symptom's bare-name column is computed, not recorded.** For a symptom tracked by
+  time of day, the column under its plain name is the four slots collapsed into one figure —
+  summed for counts, the day's worst for severity and pain. Don't treat it as an answer the
+  user typed, and never add it to the slot columns. See §4.5.
 - A `0` (severity None, count 0, or pain scale 0) and `no` (boolean/illness) are **real
   recorded values** meaning "asked about, and it was at zero/absent that day." A **blank**
   means something different (next section).
@@ -684,7 +849,68 @@ Practical consequences:
   "on the N days this item was recorded" is very different from "over all N days in the file."
   Blanks should usually be **excluded**, not treated as `0`. State which you did.
 
-### 4.5 De-duplication of symptoms
+### 4.5 Symptoms recorded by time of day
+
+Most symptoms are answered once a day. A symptom the user switched to **time-of-day tracking**
+is asked about **four times on the same day** instead — morning, afternoon, evening, and night
+— on the same scale each time (§1). Symptoms only: treatments, side effects, and illnesses are
+always once a day.
+
+When a symptom has *any* time-of-day records in the data you were given, it takes **several
+columns** rather than one, always in this order:
+
+| Header | What's in it |
+|---|---|
+| `Headache` | The **whole day collapsed into one figure** — derived, not a value the user entered. See below. |
+| `Headache - All day` | The untimed record for that day. **Only present if untimed records exist** somewhere in the data. |
+| `Headache - Morning` | The morning record. |
+| `Headache - Afternoon` | The afternoon record. |
+| `Headache - Evening` | The evening record. |
+| `Headache - Night` | The night record. |
+
+The four parts of the day always run in **day order, never alphabetically**, and **all four
+columns appear even if some are entirely blank**.
+
+**The bare-name column is computed.** This is the one most likely to mislead you. For a split
+symptom, `Headache` is not something the user typed; it is the day's records collapsed:
+
+- **Count symptoms sum.** Two episodes in the morning and five at night is a `7` day — so the
+  whole-day column can be larger than any individual slot.
+- **Severity, pain, and boolean take the day's worst.** A day of Mild / Moderate / Severe /
+  None reads `3` (Severe), not an average.
+
+This column exists **only in CSV form**. The app computes it when it writes a CSV, and the §3
+script rebuilds it the same way, so the two agree for the same data. **The JSON has no such
+field** — it stores the four records and nothing else. If you are reading JSON directly and
+want a whole-day figure, you have to collapse it yourself using the two rules above.
+
+**Never add the bare-name column to the slot columns** — that counts the same day twice. Pick a
+level and stay on it: the bare-name column for "how bad were the days," the slot columns for
+"when in the day is it worst."
+
+**Blank slots mean what blanks always mean** (§4.4): not asked, not zero. A `0` in
+`Headache - Night` is a real "no headache at bedtime"; a blank there means no record for that
+slot — often because the symptom wasn't on the survey that day at all.
+
+**Which columns exist is driven by the data, not by the current setting.** The app emits these
+columns for any symptom holding time-of-day records *in the range you were given*, whatever
+that symptom's setting is today. Two consequences worth stating out loud:
+
+- A symptom **switched on partway through** shows a long stretch of `- All day` values with
+  blank slots, then the slots filling in. **`- All day` covers a different set of days from the
+  slot columns** — the stretch before the switch — so the two are not comparable, and averaging
+  them together silently mixes two different questions.
+- A symptom **switched back off** keeps its slot columns for the historical days; new days land
+  in `- All day` instead.
+
+**The bare-name column spans both stretches**, because it collapses whatever records a day
+holds, timed or not. If you want one continuous series for a symptom across a switch, that is
+the column to use — the slot columns and `- All day` each cover only their own era.
+
+Only the JSON says which symptoms are *currently* split (`trackByTimeOfDay`); the CSV doesn't
+(§5).
+
+### 4.6 De-duplication of symptoms
 
 A symptom can be both tracked on its own *and* associated with one or more illnesses. It still
 appears in **exactly one column**. Priority: it stays as a **standalone** symptom column if it
@@ -693,7 +919,7 @@ Matching is case-insensitive. So you will never see the same symptom in two colu
 aware a symptom listed under "Flu" might actually be the user's general standalone "Cough"
 column appearing earlier in the table.
 
-### 4.6 The `notes` column holds *several* notes
+### 4.7 The `notes` column holds *several* notes
 
 A day can carry any number of notes, and the CSV packs them all into that day's single `notes`
 cell. The assembly is deterministic:
@@ -730,11 +956,13 @@ Reading it:
 - **Older exports had at most one note per day** and no attachments, so a single unprefixed
   block is perfectly normal.
 
-### 4.7 Other gotchas
+### 4.8 Other gotchas
 
-- **Dates are day-level.** There is no time-of-day in the CSV. Each row is the calendar day
+- **Rows are day-level, and there are no clock times anywhere.** Each row is the calendar day
   the user was answering *for* — which the app records independently of time zone, so a day
-  doesn't shift if they travel. (In the JSON this is the `dayKey` field; see §5.)
+  doesn't shift if they travel. (In the JSON this is the `dayKey` field; see §5.) A symptom
+  split by time of day gives you four **named parts of the day** (§4.5), not the hour anything
+  actually happened; nothing in the export timestamps an individual symptom.
 - **Don't assume regular spacing of real entries.** Rows are daily, but actual responses can
   be sparse and clustered (e.g. lots of entries during a flare, then weeks of `false`).
 - **The data is only what the user chose to track.** Absence of a symptom column doesn't mean
@@ -758,8 +986,9 @@ contains more. If the user asks about any of the following, go back to the `data
 |---|---|
 | **Measurement scale of each item** | The CSV omits whether a column is boolean/severity/count/pain-scale; you can only *infer* it from the values. The JSON states it explicitly (`measurementScale`). |
 | **Per-record notes** | Each individual symptom/treatment/side-effect record can carry its own note. The CSV keeps **only the day-level `notes`**, not these per-item notes. |
-| **Which item each day note is attached to** | The CSV flattens day notes into one cell with a `[Name]` prefix (§4.6); the JSON keeps each note as its own object with an explicit `symptomName` / `treatmentName` / `illnessName` and a `createdAt`. Notes attached to an item outside a filtered CSV are dropped entirely — the JSON has them all. |
+| **Which item each day note is attached to** | The CSV flattens day notes into one cell with a `[Name]` prefix (§4.7); the JSON keeps each note as its own object with an explicit `symptomName` / `treatmentName` / `illnessName` and a `createdAt`. Notes attached to an item outside a filtered CSV are dropped entirely — the JSON has them all. |
 | **Whether a treatment is *currently* tracking effectiveness** | The CSV shows the ratings, but not the `tracksEffectiveness` flag. A treatment can have historical ratings with tracking now switched off — the column still appears, it just stops gaining new values. |
+| **Whether a symptom is *currently* recorded by time of day** | The CSV shows the per-slot columns wherever slot records exist, but not the `trackByTimeOfDay` flag. A symptom can hold historical per-slot data with the setting now switched off (§4.5). |
 | **Tags** | User-defined tags grouping items (with colors). |
 | **Photos** | Day photos attached to surveys (the `photos/` folder + filenames). |
 | **`createdAt` / `completedAt`** | When an item was first set up, and the timestamp a survey was actually completed (vs. the day it's *for*). |
@@ -783,6 +1012,13 @@ When you only have the CSV, infer the scale from a column's values:
 - A column whose header ends in **` - Effectiveness`** is a treatment-effectiveness rating,
   not a scale at all: `1`–`5`, higher is better, never `0`. Identify it by the header, not by
   the values — `1`–`5` alone would otherwise look like a count.
+- A column ending in **` - Morning`**, **` - Afternoon`**, **` - Evening`**, **` - Night`**, or
+  **` - All day`** is one part of a time-of-day symptom (§4.5). It carries that symptom's own
+  scale, so read it exactly as you would read the bare column.
+- **The bare-name column of a split symptom is an aggregate**, which makes the "above `10`
+  means count" rule easier to trip over: four counts that never exceed `4` can sum to a
+  whole-day `16`. Check whether slot columns exist for that symptom before drawing conclusions
+  from the magnitude.
 
 ⚠️ Ambiguity: a severity column where the user only ever logged None/Mild looks identical to a
 count column that only hit `0`/`1`. A **pain-scale** column and a **count** column are
@@ -796,9 +1032,10 @@ you're inferring.
 
 ```jsonc
 {
-  "version": 5,                            // payload version — see the table below
+  "version": 6,                            // payload version — see the table below
   "exportDate": "2026-04-20T...",          // ISO 8601 timestamps throughout
-  "symptoms":   [ { "name", "measurementScale", "includeInDailySurvey", "createdAt" } ],
+  "symptoms":   [ { "name", "measurementScale", "includeInDailySurvey", "createdAt",
+                    "trackByTimeOfDay": true } ],             // v6+; asked 4x/day if true
   "treatments": [ { "name", "measurementScale", "includeInDailySurvey", "createdAt",
                     "tracksEffectiveness": true,              // v4+; asks for a 1-5 rating
                     "sideEffects": [ { "name", "measurementScale", "createdAt" } ] } ],
@@ -812,7 +1049,8 @@ you're inferring.
     "notes",                               // flattened copy of dayNotes, for old app versions
     "dayNotes": [ { "text", "createdAt",   // v3+; the real notes list
                     "symptomName", "treatmentName", "illnessName" } ],  // at most one, else null
-    "symptomRecords":    [ { "symptomName", "date", "value", "notes" } ],
+    "symptomRecords":    [ { "symptomName", "date", "value", "notes",
+                             "timeOfDay": "morning" } ],       // v6+; null/absent = all day
     "treatmentRecords":  [ { "treatmentName", "date", "value", "notes",
                              "effectiveness": 4 } ],          // v4+; 1-5, or null/absent
     "sideEffectRecords": [ { "treatmentName", "sideEffectName", "date", "value", "notes" } ],
@@ -841,9 +1079,10 @@ Everything links **by name**, not by ID. A measured value is encoded as one of:
 `"count"`, or `"painScale"`.
 Fields added in later app versions (`settings`, `surveyItemOrder`, `tags`, `photoFilenames`,
 `doctors`, `appointments`, `dayKey`, `dayNotes`, `tracksEffectiveness`, `effectiveness`,
-`surveyAnswered`) may be absent in older exports — treat every one of them as optional.
+`surveyAnswered`, `trackByTimeOfDay`, `timeOfDay`) may be absent in older exports — treat every
+one of them as optional.
 
-**Two fields need care:**
+**A few fields need care:**
 
 - **Use `dayKey`, not `date`, to decide which calendar day a survey belongs to.** `dayKey` is
   the integer `yyyymmdd` of the day the survey is *for*, and it means the same thing no matter
@@ -862,6 +1101,13 @@ Fields added in later app versions (`settings`, `surveyItemOrder`, `tags`, `phot
   real list and `notes` is a flattened string kept only so older versions of the app can still
   read the file. **Read `dayNotes` when it's present** and ignore `notes`; falling back to
   `notes` for version 1 and 2 files, where it holds the day's single note.
+- **One symptom can have up to four records on a single day.** From version 6, each
+  `symptomRecords` entry carries a `timeOfDay` of `"morning"`, `"afternoon"`, `"evening"`, or
+  `"night"`. **`null` or absent means the record covers the whole day**, which is what every
+  record written before version 6 is — so a missing `timeOfDay` is the norm, not a gap. Do
+  **not** build a `symptomName → record` map: it will silently keep one of the four and throw
+  the rest away. Collect them into a list, and see §4.5 for how a day collapses into one
+  figure (counts sum; everything else takes the day's worst).
 
 ### Payload versions
 
@@ -872,6 +1118,7 @@ Fields added in later app versions (`settings`, `surveyItemOrder`, `tags`, `phot
 | `3` | `surveyEvents[].dayNotes` — multiple notes per day, each optionally attached to one symptom, treatment, or illness. `notes` becomes a compatibility copy. |
 | `4` | `treatments[].tracksEffectiveness` and `treatmentRecords[].effectiveness` — the 1–5 treatment-effectiveness rating. |
 | `5` | `surveyEvents[].surveyAnswered` — whether the user actually answered the survey that day, as opposed to the entry existing only because they attached a note or photo. |
+| `6` | `symptoms[].trackByTimeOfDay` and `symptomRecords[].timeOfDay` — a symptom can be recorded separately for morning, afternoon, evening, and night. A record with no `timeOfDay` covers the whole day. |
 
 A file only ever states the version it was written at, and newer readers handle older files —
 so if you're handed a `"version": 1` export, everything above version 1 is simply absent, not
@@ -927,8 +1174,12 @@ when combined with other health data sources like fitness trackers, lab results,
   treatment over time, and whether the ratings track their symptoms. Say the denominator out
   loud ("across the 23 days you rated it"), keep the direction straight (`5` is good), and
   remember the rating is the user's impression on the day, not a measured outcome.
+- **Time-of-day patterns** — where a symptom is split across parts of the day (§4.5), when it
+  tends to run worst and whether that has shifted over time. Compare the slots against each
+  other rather than against the whole-day column, and say how many days actually sit behind
+  each slot.
 - **Reading the day notes** — the `notes` column is often where the real story is, and a
-  `[Name]` prefix ties a note to a specific item (§4.6). Quote the user's own words back when
+  `[Name]` prefix ties a note to a specific item (§4.7). Quote the user's own words back when
   they explain a spike better than the numbers do.
 - **Doctor-visit prep** — a concise, organized summary the user can bring to a clinician. If
   the export includes **appointments** (§5.1), draw on their pre-visit topics (especially any
