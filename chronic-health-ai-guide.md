@@ -13,11 +13,11 @@ Read the whole guide before you start interpreting numbers. The data format has 
 subtleties (especially around blank cells and what the categories actually mean) that are
 easy to get wrong.
 
-**This guide: last updated 2026-09-21, current through export payload version 6.**
+**This guide: last updated 2026-11-06, current through export payload version 7.**
 
 > ⚠️ **Check that number before you trust anything below.** A `.zip` or `.json` export states
 > its own format version in the top-level `version` field. **If the export you were given says
-> a version higher than 6**, this copy of the guide predates that format and someone is working
+> a version higher than 7**, this copy of the guide predates that format and someone is working
 > from a stale download.
 >
 > When that happens: tell the user plainly that your copy of the guide is out of date, and get
@@ -134,7 +134,8 @@ The user will give you **one** of these:
    ```
    ChronicHealth-Backup-2026-04-20.zip
    ├── data.json          ← all the data (this is what you want)
-   └── photos/            ← optional day photos (image files; usually not needed for analysis)
+   └── photos/            ← optional day photos and treatment reference images
+                             (image files; usually not needed for analysis)
        ├── <uuid>.jpg
        └── ...
    ```
@@ -155,7 +156,7 @@ The user will give you **one** of these:
   `.zip`/`.json`.
 - **Got a `.zip`?** Unzip it and find `data.json` at the top level. You can work with that JSON
   directly, or convert it to a CSV table first if that's easier to analyze (see §3). Ignore the
-  `photos/` folder unless they specifically ask about photos.
+  `photos/` folder unless they specifically ask about photos or a treatment's reference images.
 - **Got a `.json`?** You can analyze it as-is, or convert it to a CSV table first if that's
   easier (see §3).
 
@@ -206,7 +207,7 @@ Replicates the column ordering and value formatting from the app's CSV export,
 discarding configuration metadata, settings, and record-level notes that
 the CSV format does not include.
 
-Reads every payload version (1-6): it prefers `dayKey` over `date` for the
+Reads every payload version (1-7): it prefers `dayKey` over `date` for the
 calendar day, emits a `<Treatment> - Effectiveness` column where ratings exist,
 splits a symptom recorded by time of day into its whole-day and per-slot
 columns, and flattens `dayNotes` into the notes cell, falling back to older
@@ -1009,6 +1010,7 @@ contains more. If the user asks about any of the following, go back to the `data
 | **Whether a symptom is *currently* recorded by time of day** | The CSV shows the per-slot columns wherever slot records exist, but not the `trackByTimeOfDay` flag. A symptom can hold historical per-slot data with the setting now switched off (§4.5). |
 | **Tags** | User-defined tags grouping items (with colors). |
 | **Photos** | Day photos attached to surveys (the `photos/` folder + filenames). |
+| **Treatment instructions & reference images** | Per-treatment notes the user keeps for themselves — e.g. dosing directions — plus up to 5 reference images (a label, a prescription). Standing configuration, not daily data: they don't change from day to day and have no column. |
 | **`createdAt` / `completedAt`** | When an item was first set up, and the timestamp a survey was actually completed (vs. the day it's *for*). |
 | **`includeInDailySurvey`** | Whether an item is part of the everyday list. |
 | **Reminder settings, custom item ordering** | App preferences. |
@@ -1050,12 +1052,14 @@ you're inferring.
 
 ```jsonc
 {
-  "version": 6,                            // payload version — see the table below
+  "version": 7,                            // payload version — see the table below
   "exportDate": "2026-04-20T...",          // ISO 8601 timestamps throughout
   "symptoms":   [ { "name", "measurementScale", "includeInDailySurvey", "createdAt",
                     "trackByTimeOfDay": true } ],             // v6+; asked 4x/day if true
   "treatments": [ { "name", "measurementScale", "includeInDailySurvey", "createdAt",
                     "tracksEffectiveness": true,              // v4+; asks for a 1-5 rating
+                    "instructions": "Take with food",         // v7+; free text, "" if none
+                    "instructionImageFilenames": ["<uuid>.jpg"],  // v7+; files in photos/
                     "sideEffects": [ { "name", "measurementScale", "createdAt" } ] } ],
   "illnesses":  [ { "name", "includeInDailySurvey", "createdAt",
                     "symptomNames": ["Cough", "Fever"] } ],   // associations by name
@@ -1097,7 +1101,8 @@ Everything links **by name**, not by ID. A measured value is encoded as one of:
 `"count"`, or `"painScale"`.
 Fields added in later app versions (`settings`, `surveyItemOrder`, `tags`, `photoFilenames`,
 `doctors`, `appointments`, `dayKey`, `dayNotes`, `tracksEffectiveness`, `effectiveness`,
-`surveyAnswered`, `trackByTimeOfDay`, `timeOfDay`) may be absent in older exports — treat every
+`surveyAnswered`, `trackByTimeOfDay`, `timeOfDay`, `instructions`,
+`instructionImageFilenames`) may be absent in older exports — treat every
 one of them as optional.
 
 **A few fields need care:**
@@ -1126,6 +1131,12 @@ one of them as optional.
   **not** build a `symptomName → record` map: it will silently keep one of the four and throw
   the rest away. Collect them into a list, and see §4.5 for how a day collapses into one
   figure (counts sum; everything else takes the day's worst).
+- **A treatment's `instructions` are the user's own notes, not medical guidance.** From
+  version 7 a treatment can carry free text (often what a doctor told them, in their words)
+  and `instructionImageFilenames` naming images in the zip's `photos/` folder — the same folder
+  as day photos, so don't assume every file there belongs to a survey day. Quote the text back
+  as *their* note if it's relevant; don't present it as verified dosing advice, and don't
+  "correct" it — point them to their clinician or pharmacist if something looks off.
 
 ### Payload versions
 
@@ -1137,6 +1148,7 @@ one of them as optional.
 | `4` | `treatments[].tracksEffectiveness` and `treatmentRecords[].effectiveness` — the 1–5 treatment-effectiveness rating. |
 | `5` | `surveyEvents[].surveyAnswered` — whether the user actually answered the survey that day, as opposed to the entry existing only because they attached a note or photo. |
 | `6` | `symptoms[].trackByTimeOfDay` and `symptomRecords[].timeOfDay` — a symptom can be recorded separately for morning, afternoon, evening, and night. A record with no `timeOfDay` covers the whole day. |
+| `7` | `treatments[].instructions` and `treatments[].instructionImageFilenames` — per-treatment notes and up to 5 reference images (stored in `photos/`). Configuration only; no record shape changed. |
 
 A file only ever states the version it was written at, and newer readers handle older files —
 so if you're handed a `"version": 1` export, everything above version 1 is simply absent, not
