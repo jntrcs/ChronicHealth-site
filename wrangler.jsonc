@@ -1,0 +1,20 @@
+{
+  // The Chronic Health public site: support, privacy, data transfer, and the
+  // AI guides. Static assets only, no Worker script. Deploy with
+  // `npx wrangler deploy` from this folder.
+  //
+  // Deliberately separate from jacksoncurtis.me (the career site): it shares the
+  // Cloudflare account, never pages or links.
+  //
+  // The repo root holds frozen redirect stubs for the old GitHub Pages URLs
+  // (jntrcs.github.io/ChronicHealth-site/), which shipped app versions, App Store
+  // Connect and downloaded AI guides still point at. Never delete them.
+  "name": "chronichealth-site",
+  "compatibility_date": "2026-10-19",
+  "assets": {
+    "directory": "./site"
+  },
+  "routes": [
+    { "pattern": "chronichealth.jacksoncurtis.me", "custom_domain": true }
+  ]
+}

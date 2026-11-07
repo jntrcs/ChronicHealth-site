@@ -1,0 +1,14 @@
+# Chronic Health
+
+> Free iPhone and iPad app for keeping a complete daily record of symptoms, treatments, side effects and illnesses, so people with chronic conditions can walk into every appointment with the whole story. No account, no subscription, no ads; data stays on the device and exports in full.
+
+## Docs
+
+- [Product guide](https://chronichealth.jacksoncurtis.me/chronic-health-product-guide.md): every feature in detail, positioning, comparison with Bearable and Juno, FAQ
+- [AI data guide](https://chronichealth.jacksoncurtis.me/chronic-health-ai-guide.md): how to read and interpret data a user exports from the app (zip, JSON, CSV)
+
+## Optional
+
+- [Support](https://chronichealth.jacksoncurtis.me/): support, feature overview and contact
+- [Privacy policy](https://chronichealth.jacksoncurtis.me/privacy)
+- [Moving data between devices](https://chronichealth.jacksoncurtis.me/data-transfer)

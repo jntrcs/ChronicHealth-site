@@ -1,0 +1,5 @@
+# All crawlers, including AI assistants and AI search, are welcome.
+User-agent: *
+Allow: /
+
+Sitemap: https://chronichealth.jacksoncurtis.me/sitemap.xml
