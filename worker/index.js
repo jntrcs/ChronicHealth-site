@@ -62,10 +62,20 @@ async function handleFeedback(request, env) {
   return reply(200, { ok: true });
 }
 
+// Search-engine ownership proofs. Served here rather than as files in site/,
+// because Cloudflare redirects /x.html to /x and Google wants the exact URL.
+// Never remove one: the engine re-checks and drops access when it's gone.
+const VERIFICATION_FILES = {
+  '/googlede072b93d5c69680.html': 'google-site-verification: googlede072b93d5c69680.html',
+};
+
 export default {
   async fetch(request, env) {
     const { pathname } = new URL(request.url);
     if (pathname === '/api/feedback') return handleFeedback(request, env);
+    if (pathname in VERIFICATION_FILES) {
+      return new Response(VERIFICATION_FILES[pathname], { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+    }
     return env.ASSETS.fetch(request);
   },
 };

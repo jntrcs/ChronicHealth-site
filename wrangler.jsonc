@@ -15,8 +15,9 @@
   "assets": {
     "directory": "./site",
     "binding": "ASSETS",
-    // Only /api/* runs the Worker; every page stays a free static request.
-    "run_worker_first": ["/api/*"]
+    // Only /api/* and the search-engine verification files run the Worker;
+    // every page stays a free static request.
+    "run_worker_first": ["/api/*", "/google*.html"]
   },
   "send_email": [
     // The home page feedback form. A Worker can only send to a *verified*
