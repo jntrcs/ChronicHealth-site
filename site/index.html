@@ -27,6 +27,23 @@
             padding: 1rem 1.25rem;
             margin-top: 2rem;
         }
+        .feedback { margin-top: 1.5rem; }
+        .feedback label { display: block; margin-bottom: 0.9rem; font-weight: 600; font-size: 0.95rem; }
+        .feedback .optional { color: #6e6e73; font-weight: 400; }
+        .feedback input, .feedback select, .feedback textarea {
+            display: block; width: 100%; margin-top: 0.3rem; padding: 0.6rem 0.7rem;
+            font: inherit; font-weight: 400; color: inherit; background: #fff;
+            border: 1px solid #d2d2d7; border-radius: 8px;
+        }
+        .feedback textarea { min-height: 8rem; resize: vertical; }
+        .feedback .trap { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+        .feedback button {
+            font: inherit; font-weight: 600; color: #fff; background: #0066cc;
+            border: 0; border-radius: 8px; padding: 0.6rem 1.4rem; cursor: pointer;
+        }
+        .feedback button:disabled { opacity: 0.6; cursor: default; }
+        .feedback .status { margin-top: 0.75rem; min-height: 1.6em; color: #6e6e73; }
+        .feedback .status.error { color: #b3261e; }
     </style>
 </head>
 <body>
@@ -61,6 +78,56 @@
 
     <h2>Support and Feedback</h2>
     <p>Having trouble or want to request a feature? Reach out and we'll do our best to help.</p>
+
+    <form class="feedback" id="feedback-form" action="/api/feedback" method="post">
+        <label>What's this about?
+            <select name="kind">
+                <option>Feature request</option>
+                <option>Bug report</option>
+                <option>Question</option>
+                <option>Other</option>
+            </select>
+        </label>
+        <label>Message
+            <textarea name="message" required maxlength="5000"></textarea>
+        </label>
+        <label>Name <span class="optional">(optional)</span>
+            <input name="name" autocomplete="name" maxlength="100">
+        </label>
+        <label>Email <span class="optional">(optional, if you'd like a reply)</span>
+            <input name="email" type="email" autocomplete="email" maxlength="200">
+        </label>
+        <div class="trap" aria-hidden="true">
+            <label>Website <input name="website" tabindex="-1" autocomplete="off"></label>
+        </div>
+        <button type="submit">Send feedback</button>
+        <p class="status" role="status" aria-live="polite"></p>
+    </form>
+    <script>
+        (() => {
+            const form = document.getElementById('feedback-form');
+            const status = form.querySelector('.status');
+            const send = form.querySelector('button');
+            form.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                send.disabled = true;
+                status.className = 'status';
+                status.textContent = 'Sending…';
+                try {
+                    const res = await fetch('/api/feedback', { method: 'POST', body: new FormData(form) });
+                    const body = await res.json().catch(() => ({}));
+                    if (!res.ok) throw new Error(body.error || "Sorry, that didn't send. Please email chronic.health.support@gmail.com instead.");
+                    form.reset();
+                    status.textContent = 'Thanks, that was sent.';
+                } catch (err) {
+                    status.className = 'status error';
+                    status.textContent = err.message;
+                } finally {
+                    send.disabled = false;
+                }
+            });
+        })();
+    </script>
 
     <div class="contact">
         <p><strong>Email:</strong> <a href="mailto:chronic.health.support@gmail.com">chronic.health.support@gmail.com</a></p>
