@@ -13,7 +13,7 @@ Read the whole guide before you start interpreting numbers. The data format has 
 subtleties (especially around blank cells and what the categories actually mean) that are
 easy to get wrong.
 
-**This guide: last updated 2026-11-10, current through export payload version 8.**
+**This guide: last updated 2026-11-11, current through export payload version 8.**
 
 > ⚠️ **Check that number before you trust anything below.** A `.zip` or `.json` export states
 > its own format version in the top-level `version` field. **If the export you were given says
@@ -1068,7 +1068,7 @@ you're inferring.
     "dayKey": 20260420,                    // v2+; the real calendar day, as yyyymmdd
     "completedAt",
     "surveyAnswered": true,                // v5+; did the user actually answer the survey?
-    "isSiriOnly": false,                   // v8+; day was recorded only through Shortcuts
+    "isSiriOnly": false,                   // v8+; day was recorded only through Shortcuts / Quick Count
     "notes",                               // flattened copy of dayNotes, for old app versions
     "dayNotes": [ { "text", "createdAt",   // v3+; the real notes list
                     "symptomName", "treatmentName", "illnessName" } ],  // at most one, else null
@@ -1142,12 +1142,13 @@ one of them as optional.
   as *their* note if it's relevant; don't present it as verified dosing advice, and don't
   "correct" it — point them to their clinician or pharmacist if something looks off.
 
-- **`isSiriOnly` days were recorded through Apple Shortcuts, not the full survey.** From
-  version 8 the user can record a symptom, treatment, or illness from a shortcut without opening
-  the app (the field names say "Siri" because Siri will use the same path later). The first
-  such record on an untaken day **counts as taking that day's survey**: `surveyAnswered` is
-  `true` and `isSiriOnly` is `true`. The app then scores every item the shortcut didn't
-  mention as **off** for that day, so the CSV and the app's reports both show zeros there, and
+- **`isSiriOnly` days were recorded through Apple Shortcuts or the Quick Count widget, not the
+  full survey.** From version 8 the user can record a symptom, treatment, or illness from a
+  shortcut without opening the app, and can add one to a count symptom or treatment from the
+  Quick Count Home Screen widget or Control Center control (the field names say "Siri" because
+  Siri will use the same path later). The first such record on an untaken day **counts as taking that day's survey**: `surveyAnswered` is
+  `true` and `isSiriOnly` is `true`. The app then scores every item the shortcut or widget didn't
+  record as **off** for that day, so the CSV and the app's reports both show zeros there, and
   the §3 converter matches that. Be aware, though, that the user wasn't shown the rest of the
   survey that day. If a conclusion leans on those zeros, say so, and ask whether the user
   remembers. The app's calendar flags such a day "Daily survey not taken" when a daily-survey item went unrecorded. Opening the survey
@@ -1165,7 +1166,7 @@ one of them as optional.
 | `5` | `surveyEvents[].surveyAnswered` — whether the user actually answered the survey that day, as opposed to the entry existing only because they attached a note or photo. |
 | `6` | `symptoms[].trackByTimeOfDay` and `symptomRecords[].timeOfDay` — a symptom can be recorded separately for morning, afternoon, evening, and night. A record with no `timeOfDay` covers the whole day. |
 | `7` | `treatments[].instructions` and `treatments[].instructionImageFilenames` — per-treatment notes and up to 5 reference images (stored in `photos/`). Configuration only; no record shape changed. |
-| `8` | `surveyEvents[].isSiriOnly` (always written) and `loggedViaSiri` on symptom, treatment, and illness records — items recorded through Apple Shortcuts, and days recorded only that way. No value encoding changed; the converter needs no change. |
+| `8` | `surveyEvents[].isSiriOnly` (always written) and `loggedViaSiri` on symptom, treatment, and illness records — items recorded through Apple Shortcuts or the Quick Count widget, and days recorded only that way. No value encoding changed; the converter needs no change. |
 
 A file only ever states the version it was written at, and newer readers handle older files —
 so if you're handed a `"version": 1` export, everything above version 1 is simply absent, not

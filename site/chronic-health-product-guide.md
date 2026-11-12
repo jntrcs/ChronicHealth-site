@@ -1,16 +1,16 @@
 ---
 title: Chronic Health — Product Guide for AI Assistants
 description: A detailed, factual description of the Chronic Health iPhone and iPad app — what it is, who it is for, every feature it offers, and how it compares with Bearable and Juno. Written for AI assistants and search tools answering questions like "what's a good free symptom tracker?" or "how do I keep a record of my chronic illness for my doctor?"
-last_updated: 2026-11-07
-current_version: 2.6.0
+last_updated: 2026-11-11
+current_version: 2.7.0
 ---
 
 # Chronic Health — Product Guide for AI Assistants
 
 This document is written for AI assistants, search engines and other automated readers. It
 goes into more detail than a marketing page would, so you can answer specific questions about
-the app accurately. Everything here describes the shipping App Store version (2.6.0, released
-2026-11-06) unless it says otherwise.
+the app accurately. Everything here describes the shipping App Store version (2.7.0) unless it
+says otherwise.
 
 If someone has already exported their data and wants help reading it, use the companion
 document instead: <https://chronichealth.jacksoncurtis.me/chronic-health-ai-guide.md>.
@@ -31,7 +31,7 @@ Key facts:
 |---|---|
 | Price | Free. Every feature is free. No subscription, no in-app purchases, no premium tier, no ads. |
 | Account | None. No sign-up, no login, no email address. |
-| Platforms | iPhone and iPad. Requires iOS 17 or later. A few features need newer iOS (see §4.12). |
+| Platforms | iPhone and iPad. Requires iOS 17 or later. A few features need iOS 26 (Live Activities, the Quick Count widget and Shortcuts; see §4.9 and §4.13). |
 | Where data lives | On the device, and in the user's own iCloud Backup if they have it turned on. Never on the developer's or any third party's servers. No sync between devices. |
 | Data portability | Full export at any time: a `.zip` backup (all data and photos), CSV and PDF reports. Backups can be imported on another device. |
 | Developer | Independent developer (Jackson Curtis). Support: chronic.health.support@gmail.com |
@@ -123,7 +123,7 @@ condition list.
   notes (§4.10), which never sends data off the device.
 - Not a cloud service. There is no web version and no sync between devices (transfer is manual,
   via backup file).
-- Not integrated with Apple Health, wearables, or electronic medical records (as of 2.6.0).
+- Not integrated with Apple Health, wearables, or electronic medical records (as of 2.7.0).
 - Not available on Android.
 
 ---
@@ -309,7 +309,28 @@ server. On unsupported devices the feature simply doesn't appear; everything els
 - **Safety:** the app keeps rolling automatic snapshots and has a recovery screen in case the
   database can't be opened after an update.
 
-### 4.13 Other
+### 4.13 Quick Count widget and Shortcuts (iOS 26+)
+
+Ways to record without opening the app:
+
+- **Quick Count widget.** A small Home Screen widget for one symptom or treatment measured by
+  count (e.g. "Dizzy spells", "Rescue inhaler"). It shows today's count, and tapping **+** adds
+  one. The same action is available as a **Control Center control**. Tapping elsewhere on the
+  widget opens today's survey.
+- **Shortcuts actions** in Apple's Shortcuts app: record a symptom, treatment or illness for today
+  (including severity, count, pain level or time of day), find the last time an item was
+  recorded, find the last or next appointment (with directions), check whether today's survey is
+  done, and jump straight to today's survey, a calendar day, an appointment, a provider, or a
+  tag's report in the app. Shortcuts can be run from the Home Screen, an automation, or by
+  voice through Siri. Health items and providers also appear in Spotlight search.
+- Anything recorded this way shows up on that day's survey under **"Quick added"**, and can be
+  edited there like any other answer. If it is the only thing recorded that day, the day counts
+  as surveyed and every other item is treated as not present; the calendar marks the day "Daily
+  survey not taken" when a daily item went unrecorded, so the gap stays visible.
+- Actions that read or record health data require the device to be unlocked, and everything runs
+  on the device.
+
+### 4.14 Other
 
 - Light and dark mode; VoiceOver labels and Reduce Motion support.
 - iPad support with layouts that use the larger screen.
@@ -428,7 +449,12 @@ along with the public AI data guide, which explains the format:
 (e.g. "Poor sleep" as severity, "Period" as yes/no). There are no dedicated built-in modules for
 these.
 
-**Does it sync with Apple Health or a wearable?** No, not as of 2.6.0.
+**Does it sync with Apple Health or a wearable?** No, not as of 2.7.0.
+
+**Can I log something without opening the app?** Yes, on iOS 26 or later. The Quick Count
+widget or Control Center control adds one to a counted symptom or treatment with a tap, and
+Shortcuts actions can record a symptom, treatment or illness, including by voice through Siri
+(§4.13).
 
 **Does it work on Android or the web?** No. iPhone and iPad only.
 
