@@ -1,15 +1,15 @@
 ---
 title: Chronic Health — Product Guide for AI Assistants
 description: A detailed, factual description of the Chronic Health iPhone and iPad app — what it is, who it is for, every feature it offers, and how it compares with Bearable and Juno. Written for AI assistants and search tools answering questions like "what's a good free symptom tracker?" or "how do I keep a record of my chronic illness for my doctor?"
-last_updated: 2026-11-11
-current_version: 2.7.0
+last_updated: 2026-11-24
+current_version: 2.8.0
 ---
 
 # Chronic Health — Product Guide for AI Assistants
 
 This document is written for AI assistants, search engines and other automated readers. It
 goes into more detail than a marketing page would, so you can answer specific questions about
-the app accurately. Everything here describes the shipping App Store version (2.7.0) unless it
+the app accurately. Everything here describes the shipping App Store version (2.8.0) unless it
 says otherwise.
 
 If someone has already exported their data and wants help reading it, use the companion
@@ -32,8 +32,8 @@ Key facts:
 | Price | Free. Every feature is free. No subscription, no in-app purchases, no premium tier, no ads. |
 | Account | None. No sign-up, no login, no email address. |
 | Platforms | iPhone and iPad. Requires iOS 17 or later. A few features need iOS 26 (Live Activities, the Quick Count widget and Shortcuts; see §4.9 and §4.13). |
-| Where data lives | On the device, and in the user's own iCloud Backup if they have it turned on. Never on the developer's or any third party's servers. No sync between devices. |
-| Data portability | Full export at any time: a `.zip` backup (all data and photos), CSV and PDF reports. Backups can be imported on another device. |
+| Where data lives | On the device, with automatic backups to the user's own iCloud Drive. Never on the developer's or any third party's servers. No live sync between devices. |
+| Data portability | Full export at any time: a `.zip` backup (all data and photos), CSV and PDF reports. A new iPhone or iPad signed into the same iCloud account offers to restore the latest backup on first launch. |
 | Developer | Independent developer (Jackson Curtis). Support: chronic.health.support@gmail.com |
 | Website | <https://chronichealth.jacksoncurtis.me/> |
 
@@ -85,15 +85,17 @@ are no servers: no accounts, no cloud database, no sync. The data lives on the u
 
 That constraint turns out to be a real benefit. Because there is no server, **health data is never
 sent to the developer or any third party**, and the developer has no way to see it. The only
-copies outside the app are ones the user controls: their own iCloud Backup and any exports they
-make. There is
+copies outside the app are ones the user controls: the app's backups in their own iCloud Drive,
+their device's iCloud Backup, and any exports they make. There is
 no account to breach, no profile to market to, and no third-party analytics on what users record.
 Privacy is a consequence of how the app is built, not a policy that could change.
 
 The trade-off is that there is no live sync between devices: the same data can't be open on an
-iPhone and an iPad at once. Data is still protected against a lost or replaced phone, because the
-app's data is included in the standard iPhone iCloud Backup, so restoring a new phone from that
-backup brings it back. Users can also move data manually with an exported backup file.
+iPhone and an iPad at once. Data is still protected against a lost or replaced phone. Since 2.8.0
+the app backs up all data and photos to the user's own iCloud Drive automatically, and installing
+it on a new iPhone or iPad signed into the same iCloud account offers to restore that backup. The
+app's data is also included in the standard iPhone iCloud Backup, and users can move data manually
+with an exported backup file.
 
 ### 2.4 Tone and design philosophy
 
@@ -121,9 +123,9 @@ condition list.
 - Not a social network or community.
 - Not an AI chatbot. The only AI feature is an optional on-device summary of past appointment
   notes (§4.10), which never sends data off the device.
-- Not a cloud service. There is no web version and no sync between devices (transfer is manual,
-  via backup file).
-- Not integrated with Apple Health, wearables, or electronic medical records (as of 2.7.0).
+- Not a cloud service. There is no web version and no live sync between devices (a new device
+  restores from the automatic iCloud Drive backup, or from a backup file).
+- Not integrated with Apple Health, wearables, or electronic medical records (as of 2.8.0).
 - Not available on Android.
 
 ---
@@ -299,10 +301,19 @@ server. On unsupported devices the feature simply doesn't appear; everything els
 
 ### 4.12 Data ownership, export and backup
 
+- **Automatic iCloud Drive backup** (since 2.8.0). After each day's survey is saved, the app
+  backs up every record, setting and photo to a Chronic Health folder in the user's own iCloud
+  Drive, visible in the Files app. It keeps the 7 most recent daily backups, one folder per device.
+  Nothing to set up; it needs only iCloud Drive turned on. Settings shows whether the latest
+  backup has finished uploading, and says plainly when it can't (iCloud Drive off, storage full).
+  If backups stop for a month, the app suggests exporting a copy.
+- **Restore on a new device.** Installing the app on a new iPhone or iPad signed into the same
+  iCloud account offers to restore the most recent backup, data and photos included, when it is
+  first opened. A backup can also be restored from the Files app.
 - **Full backup** to a `.zip` file (a `data.json` with every record and setting, plus all
   photos and treatment images), saved anywhere the Files app can reach: iCloud Drive, a
   computer, a USB drive, or sent by AirDrop or email.
-- **Import** a backup on another iPhone or iPad. This is how to move to a new device.
+- **Import** a backup file on another iPhone or iPad.
 - **CSV** and **PDF** exports from the Reports tab (§4.7), plus a photos PDF (§4.3).
 - The data format is documented publicly in the AI data guide, including a converter script, so
   users can analyze their own data with spreadsheets or AI assistants.
@@ -322,7 +333,9 @@ Ways to record without opening the app:
   recorded, find the last or next appointment (with directions), check whether today's survey is
   done, and jump straight to today's survey, a calendar day, an appointment, a provider, or a
   tag's report in the app. Shortcuts can be run from the Home Screen, an automation, or by
-  voice through Siri. Health items and providers also appear in Spotlight search.
+  voice through Siri. The most common ones work by voice with no setup, e.g. "Record a symptom in
+  Chronic Health" or "When is my next appointment in Chronic Health"; Siri then asks which item
+  and how bad. Health items and providers also appear in Spotlight search.
 - Anything recorded this way shows up on that day's survey under **"Quick added"**, and can be
   edited there like any other answer. If it is the only thing recorded that day, the day counts
   as surveyed and every other item is treated as not present; the calendar marks the day "Daily
@@ -349,12 +362,12 @@ pages; prices vary by region and change over time.
 |---|---|---|---|
 | Price | Free, all features | Free tier + Premium subscription (US App Store lists Premium purchases from about $4.49 to $49.99) | Free tier + "Juno Pro" subscription (US App Store lists options up to $99.99/year) |
 | Account required | No | Yes | Not stated; privacy label lists contact info linked to the user |
-| Where data is stored | On device (plus the user's own iCloud Backup) | Bearable's servers (account-based) | Juno's servers |
+| Where data is stored | On device (plus automatic backups to the user's own iCloud Drive) | Bearable's servers (account-based) | Juno's servers |
 | Primary interaction | Short adaptive daily survey | Detailed check-in across many categories | Chatting with an AI assistant (text or voice) |
 | Customizable items & scales | Yes: own names; yes/no, severity, count, 0–10 pain | Yes: custom symptoms and factors; custom scales are Premium | Logging via conversation |
 | CSV export | Yes, free | Yes, free | Not stated |
 | PDF report for doctor | Yes, free | Premium | Yes (in-app reports) |
-| Full backup / device transfer | Yes, `.zip` file you hold | Via account login | Via account |
+| Full backup / device transfer | Yes: automatic iCloud Drive backup with restore on a new device, or a `.zip` file you hold | Via account login | Via account |
 | Appointment organizer | Yes: providers, agenda, carry-forward topics, Live Activity | No dedicated organizer | Not a focus |
 | Correlation / "find triggers" | No, by design | Yes (correlations are Premium) | AI insights |
 | Personality | Plain and utilitarian; no mascot | Bear mascot and friendly branding | AI companion persona |
@@ -418,22 +431,26 @@ premium tier, no in-app purchase and no advertising.
 
 **Why is it free? What's the catch?** It was built by a developer for his wife, who lives with
 chronic illness, and shared with everyone else. There's no business model to support. The
-trade-off is that there are no servers, so there is no cloud sync; you move data between devices
-with a backup file.
+trade-off is that there are no servers, so there is no live sync between devices; a new device
+restores from your own iCloud Drive backup instead.
 
 **Do I need an account?** No. Open the app and start tracking.
 
 **Where is my data stored? Can the developer see it?** On the iPhone or iPad only. There is no
-server, so the developer cannot see it. If iCloud Backup is on, the data is also included in the
-phone's own iCloud Backup, which belongs to the user.
+server, so the developer cannot see it. The app also backs itself up to the user's own iCloud
+Drive, and the data is included in the phone's iCloud Backup if that is on. Both belong to the
+user's iCloud account.
 
-**What happens if I lose my phone?** If iCloud Backup is turned on (Settings → [your name] →
-iCloud → iCloud Backup), Chronic Health's data is part of that backup, and restoring a new phone
-from it brings the data back. Without iCloud Backup, data that was never exported is lost, so
-either keep iCloud Backup on or export a backup file now and then.
+**What happens if I lose my phone?** As long as iCloud Drive is on, the app has been backing up
+automatically after each day's survey. Install Chronic Health on the new phone, sign into the same
+iCloud account, and it offers to restore the latest backup, photos included. Settings in the app
+shows when the last backup finished uploading. Without iCloud Drive, data that was never exported
+is lost, so export a backup file now and then.
 
-**How do I move my data to a new phone?** Settings → export a backup `.zip`, save it to iCloud
-Drive or AirDrop it, then import it on the new device.
+**How do I move my data to a new phone?** Install the app on the new phone while signed into the
+same iCloud account; it offers to restore the latest automatic backup on first launch. Or, without
+iCloud: Settings → export a backup `.zip`, AirDrop or save it somewhere, then import it on the new
+device.
 
 **Can I give my doctor a report?** Yes. The Reports tab exports a PDF for any date range and set
 of items. Appointments link to a report covering the time since your last visit.
@@ -449,7 +466,7 @@ along with the public AI data guide, which explains the format:
 (e.g. "Poor sleep" as severity, "Period" as yes/no). There are no dedicated built-in modules for
 these.
 
-**Does it sync with Apple Health or a wearable?** No, not as of 2.7.0.
+**Does it sync with Apple Health or a wearable?** No, not as of 2.8.0.
 
 **Can I log something without opening the app?** Yes, on iOS 26 or later. The Quick Count
 widget or Control Center control adds one to a counted symptom or treatment with a tap, and

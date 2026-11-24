@@ -13,7 +13,7 @@ Read the whole guide before you start interpreting numbers. The data format has 
 subtleties (especially around blank cells and what the categories actually mean) that are
 easy to get wrong.
 
-**This guide: last updated 2026-11-11, current through export payload version 8.**
+**This guide: last updated 2026-11-24, current through export payload version 9.**
 
 > ⚠️ **Check that number before you trust anything below.** A `.zip` or `.json` export states
 > its own format version in the top-level `version` field. **If the export you were given says
@@ -1052,9 +1052,11 @@ you're inferring.
 
 ```jsonc
 {
-  "version": 8,                            // payload version — see the table below
+  "version": 9,                            // payload version — see the table below
   "exportDate": "2026-04-20T...",          // ISO 8601 timestamps throughout
   "symptoms":   [ { "name", "measurementScale", "includeInDailySurvey", "createdAt",
+                    "stableID": "<uuid>",                     // v9+; also on treatments, illnesses,
+                                                              // tags, doctors — an internal id, ignore
                     "trackByTimeOfDay": true } ],             // v6+; asked 4x/day if true
   "treatments": [ { "name", "measurementScale", "includeInDailySurvey", "createdAt",
                     "tracksEffectiveness": true,              // v4+; asks for a 1-5 rating
@@ -1167,6 +1169,7 @@ one of them as optional.
 | `6` | `symptoms[].trackByTimeOfDay` and `symptomRecords[].timeOfDay` — a symptom can be recorded separately for morning, afternoon, evening, and night. A record with no `timeOfDay` covers the whole day. |
 | `7` | `treatments[].instructions` and `treatments[].instructionImageFilenames` — per-treatment notes and up to 5 reference images (stored in `photos/`). Configuration only; no record shape changed. |
 | `8` | `surveyEvents[].isSiriOnly` (always written) and `loggedViaSiri` on symptom, treatment, and illness records — items recorded through Apple Shortcuts or the Quick Count widget, and days recorded only that way. No value encoding changed; the converter needs no change. |
+| `9` | `stableID` (a UUID) on each symptom, treatment, illness, tag, and doctor — an internal id that keeps the user's saved Shortcuts and widgets working after a restore. It carries no health information; items are still linked by name everywhere. The converter needs no change. |
 
 A file only ever states the version it was written at, and newer readers handle older files —
 so if you're handed a `"version": 1` export, everything above version 1 is simply absent, not

@@ -43,18 +43,20 @@
     <h1>Import &amp; Export Data</h1>
     <p class="subtitle">Transfer your health data between devices or keep a backup</p>
 
-    <p>Chronic Health stores all data locally on your device — there's no cloud sync or account system. The import/export feature lets you move your data manually using a standard JSON file.</p>
+    <p>Chronic Health stores all data locally on your device — there's no account system and no live sync between devices. It backs your data up to your own iCloud Drive automatically, and the import/export feature lets you also move it manually using a backup file.</p>
 
     <h2>Do I need this?</h2>
-    <p>In most cases, <strong>you don't</strong>. If you use iCloud Backup (the default on most iPhones), your entire device — including all Chronic Health data — is automatically backed up to your iCloud account. When you set up a new iPhone and restore from that backup, your Chronic Health data comes with it, no extra steps needed.</p>
-    <p>You can check whether iCloud Backup is enabled in <strong>Settings &gt; [your name] &gt; iCloud &gt; iCloud Backup</strong>.</p>
-    <p>The import/export feature is useful when iCloud Backup isn't an option — for example, if you don't use iCloud, if you're setting up a new phone as a fresh device instead of restoring from backup, or if you want an extra manual backup for peace of mind.</p>
+    <p>In most cases, <strong>you don't</strong>. Starting with version 2.8.0, Chronic Health backs up all your data and photos to your own iCloud Drive automatically, after each day's survey. Install the app on a new iPhone or iPad signed into the same iCloud account, and it offers to restore your most recent backup when you first open it — no export needed. You can check when the last backup finished uploading in the app's <strong>Settings</strong> tab.</p>
+    <p>Automatic backups need iCloud Drive turned on for Chronic Health (<strong>Settings &gt; [your name] &gt; iCloud</strong>). Chronic Health's data is also included in Apple's standard iCloud Backup of your device, if you use it.</p>
+    <p>The import/export feature is useful when iCloud isn't an option — for example, if you don't use iCloud, if you skipped the restore offer, or if you want an extra copy you keep yourself.</p>
 
     <h2>What's included in the export?</h2>
     <p>An export captures <strong>everything</strong> in the app:</p>
     <ul>
-        <li><strong>Configurations</strong> — all your symptoms, treatments (with side effects), and illnesses (with symptom associations)</li>
-        <li><strong>Survey history</strong> — every daily survey you've completed, with all recorded values</li>
+        <li><strong>Configurations</strong> — all your symptoms, treatments (with side effects), illnesses (with symptom associations), and tags</li>
+        <li><strong>Survey history</strong> — every daily survey you've completed, with all recorded values and notes</li>
+        <li><strong>Photos</strong> — day photos and treatment reference images</li>
+        <li><strong>Appointments</strong> — your providers and appointments, with their notes</li>
         <li><strong>Settings</strong> — your daily reminder time and whether reminders are enabled</li>
     </ul>
 
@@ -64,7 +66,7 @@
         <li>Tap <strong>Export Data</strong></li>
         <li>Choose where to save the file (iCloud Drive, Files, AirDrop, etc.)</li>
     </ol>
-    <p>The file is saved as a <code>.json</code> file that you can store, share, or transfer however you like.</p>
+    <p>The file is saved as a <code>.zip</code> file that you can store, share, or transfer however you like.</p>
 
     <h2>How to import</h2>
     <ol>
@@ -81,19 +83,19 @@
     <h2>Common use cases</h2>
 
     <h3>Switching to a new phone</h3>
-    <p>If you're moving to a new iPhone and don't use iCloud Backup (or want to be safe), export your data on the old device, transfer the file (via AirDrop, iCloud Drive, email, etc.), and import it on the new device.</p>
+    <p>If you use iCloud, just install Chronic Health on the new phone and accept the restore offer. If you don't use iCloud (or want to be safe), export your data on the old device, transfer the file (via AirDrop, email, etc.), and import it on the new device.</p>
 
     <h3>Keeping a manual backup</h3>
-    <p>Periodically export your data and save the file to iCloud Drive or another location. If anything happens to your device, you can restore your full health history.</p>
+    <p>The automatic iCloud Drive backup already covers this for most people. If you don't use iCloud, or want a copy outside it, periodically export your data and save the file somewhere safe. If anything happens to your device, you can restore your full health history.</p>
 
     <div class="callout">
-        <p><strong>Privacy note:</strong> The export file contains your health data in plain text. Treat it like any other sensitive personal information. Chronic Health never transmits this file — you control where it goes.</p>
+        <p><strong>Privacy note:</strong> The export file contains your health data in plain text. Treat it like any other sensitive personal information. Chronic Health never sends this file anywhere — you control where it goes. Automatic backups go only to your own iCloud Drive.</p>
     </div>
 
     <h2>Troubleshooting</h2>
 
     <h3>Import doesn't seem to work</h3>
-    <p>Make sure you're selecting a file that was exported from Chronic Health. The file should be in JSON format. If the file is corrupted or from a different app, the import will show an error.</p>
+    <p>Make sure you're selecting a file that was exported from Chronic Health. The file should be a <code>.zip</code> backup (or a <code>.json</code> file from an older version of the app). If the file is corrupted or from a different app, the import will show an error.</p>
 
     <h3>I accidentally imported and lost my data</h3>
     <p>If you had previously exported your data, you can re-import that earlier export file. If not, the overwritten data cannot be recovered — this is why we recommend keeping periodic backups.</p>
